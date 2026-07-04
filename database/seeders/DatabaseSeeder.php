@@ -15,6 +15,17 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        // Create default test user for Postman API testing
+        User::updateOrCreate(
+            ['email' => 'test@example.com'],
+            [
+                'name' => 'Test User',
+                'phone' => '+1234567890',
+                'password' => \Illuminate\Support\Facades\Hash::make('password'),
+                'email_verified_at' => now(),
+            ]
+        );
+
         User::factory(5)->create();
 
         $this->call([

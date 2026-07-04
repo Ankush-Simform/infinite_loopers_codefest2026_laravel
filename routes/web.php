@@ -9,3 +9,7 @@ Route::get('/', function () {
         'status' => 'ok',
     ], 'AMRV API backend is running');
 });
+
+Route::get('/swagger', function () {
+    return redirect('/swagger/index.html');
+});

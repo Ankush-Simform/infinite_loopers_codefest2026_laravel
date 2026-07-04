@@ -119,4 +119,14 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    /*
+    |--------------------------------------------------------------------------
+    | JWT Configuration
+    |--------------------------------------------------------------------------
+    */
+    'jwt' => [
+        'secret' => env('JWT_SECRET', env('APP_KEY')),
+        'ttl' => (int) env('JWT_TTL', 18000), // Default: 5 hours
+    ],
+
 ];

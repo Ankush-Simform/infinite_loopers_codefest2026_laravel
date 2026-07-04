@@ -1,0 +1,313 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Http\Controllers\Api\V1\Reports;
+
+use App\Enums\ReportStatus;
+use App\Http\Controllers\Controller;
+use App\Http\Resources\Api\V1\Reports\ReportResource;
+use App\Models\MedicalReport;
+use App\Models\MedicalKnowledge;
+use App\Models\MedicalEntity;
+use App\Models\ReportTag;
+use App\Services\CloudinaryService;
+use App\Support\ApiResponse;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\Response;
+
+final class ReportUploadController extends Controller
+{
+    public function __construct(
+        protected CloudinaryService $cloudinaryService
+    ) {}
+
+    /**
+     * Step 1: Upload File
+     */
+    public function upload(Request $request): JsonResponse
+    {
+        try {
+            $request->validate([
+                'profile_id' => 'required|exists:profiles,id',
+                'file' => 'required|file|mimes:pdf,jpg,jpeg,png|max:10240', // Max 10MB
+            ]);
+
+            $file = $request->file('file');
+            $fileHash = hash_file('sha256', $file->getRealPath());
+
+            // Check duplicate in database
+            $duplicate = MedicalReport::where('profile_id', $request->profile_id)
+                ->where('file_hash', $fileHash)
+                ->first();
+
+            if ($duplicate) {
+                Log::warning('Duplicate file upload attempted during staging', [
+                    'profile_id' => $request->profile_id,
+                    'file_hash' => $fileHash,
+                ]);
+                return ApiResponse::error('This file has already been uploaded for this profile.', Response::HTTP_CONFLICT);
+            }
+
+            // Upload original file to Cloudinary
+            $uploaded = $this->cloudinaryService->uploadFile($file, 'medical_reports_staging');
+
+            $uploadId = (string) Str::uuid();
+
+            // Structure mock AI response results (normally fetched via OCR/AI services)
+            $stagedData = [
+                'created_at' => now()->timestamp,
+                'profile_id' => (int) $request->profile_id,
+                'file_url' => $uploaded['url'],
+                'file_hash' => $fileHash,
+                'report_type' => $uploaded['format'],
+                'report' => [
+                    'title' => 'Staged Report - ' . now()->format('Y-m-d H:i'),
+                    'report_type' => $uploaded['format'],
+                    'doctor_name' => 'Dr. Andrew Miller',
+                    'hospital_name' => 'Central Health Laboratory',
+                    'report_date' => now()->toDateString(),
+                ],
+                'knowledge' => [
+                    'summary' => 'This report presents general vitals and blood values. Most parameters including blood sugar and triglycerides are within normal ranges. Suggesting standard dietary routine.',
+                    'risk_level' => 'low',
+                    'recommendations' => [
+                        'Continue regular hydration.',
+                        'Schedule follow-up check in 6 months.',
+                        'Keep moderate daily physical exercise.'
+                    ],
+                    'confidence_score' => 97.80,
+                ],
+                'entities' => [
+                    [
+                        'entity_type' => 'vital',
+                        'entity_name' => 'Systolic Blood Pressure',
+                        'value' => '120',
+                        'unit' => 'mmHg',
+                        'reference_range' => '90-120',
+                        'status' => 'normal',
+                        'confidence' => 99.00
+                    ],
+                    [
+                        'entity_type' => 'vital',
+                        'entity_name' => 'Diastolic Blood Pressure',
+                        'value' => '80',
+                        'unit' => 'mmHg',
+                        'reference_range' => '60-80',
+                        'status' => 'normal',
+                        'confidence' => 99.00
+                    ],
+                    [
+                        'entity_type' => 'lab_value',
+                        'entity_name' => 'Hemoglobin',
+                        'value' => '14.2',
+                        'unit' => 'g/dL',
+                        'reference_range' => '13.8-17.2',
+                        'status' => 'normal',
+                        'confidence' => 98.50
+                    ]
+                ],
+                'tags' => ['blood-test', 'vitals']
+            ];
+
+            // Store in Cache temporary storage for 24 hours
+            Cache::put('temp_upload_' . $uploadId, $stagedData, now()->addDay());
+
+            Log::info('Staged medical report uploaded successfully', [
+                'upload_id' => $uploadId,
+                'profile_id' => $request->profile_id,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'upload_id' => $uploadId,
+                'status' => 'processing',
+            ], Response::HTTP_CREATED);
+        } catch (\Throwable $e) {
+            Log::error('Staged upload failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return ApiResponse::error('An error occurred during upload: ' . $e->getMessage(), Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Step 2: Check Processing Status
+     */
+    public function status(Request $request, string $upload_id): JsonResponse
+    {
+        try {
+            $data = Cache::get('temp_upload_' . $upload_id);
+
+            if ($data === null) {
+                return ApiResponse::error('Temporary upload not found or expired.', Response::HTTP_NOT_FOUND);
+            }
+
+            // Simulate processing lag (e.g. returns processing for 3 seconds, then completes)
+            $elapsedSeconds = now()->timestamp - (int) $data['created_at'];
+
+            if ($elapsedSeconds < 3) {
+                return response()->json([
+                    'status' => 'processing',
+                    'step' => 'entity_extraction',
+                    'progress' => 75,
+                ]);
+            }
+
+            return response()->json([
+                'status' => 'completed',
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Status check failed', [
+                'upload_id' => $upload_id,
+                'error' => $e->getMessage(),
+            ]);
+            return ApiResponse::error('Failed to get status.', Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Step 3: Get Review Data
+     */
+    public function review(Request $request, string $upload_id): JsonResponse
+    {
+        try {
+            $data = Cache::get('temp_upload_' . $upload_id);
+
+            if ($data === null) {
+                return ApiResponse::error('Temporary upload not found or expired.', Response::HTTP_NOT_FOUND);
+            }
+
+            return response()->json([
+                'upload_id' => $upload_id,
+                'report' => $data['report'],
+                'knowledge' => $data['knowledge'],
+                'entities' => $data['entities'],
+                'tags' => $data['tags'],
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Staged review retrieval failed', [
+                'upload_id' => $upload_id,
+                'error' => $e->getMessage(),
+            ]);
+            return ApiResponse::error('Failed to retrieve review details.', Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Step 4: Save Report
+     */
+    public function save(Request $request, string $upload_id): JsonResponse
+    {
+        try {
+            $data = Cache::get('temp_upload_' . $upload_id);
+
+            if ($data === null) {
+                return ApiResponse::error('Temporary upload not found or expired.', Response::HTTP_NOT_FOUND);
+            }
+
+            // Validate requested edits
+            $request->validate([
+                'profile_id' => 'required|exists:profiles,id',
+                'report' => 'required|array',
+                'report.title' => 'required|string|max:255',
+                'report.report_type' => 'required|string|max:50',
+                'report.doctor_name' => 'nullable|string|max:255',
+                'report.hospital_name' => 'nullable|string|max:255',
+                'report.report_date' => 'required|date',
+                'entities' => 'nullable|array',
+                'tags' => 'nullable|array',
+            ]);
+
+            // Persist elements inside database transaction
+            $reportId = DB::transaction(function () use ($request, $data): int {
+                // 1. Create Report
+                $report = MedicalReport::create([
+                    'profile_id' => $request->profile_id,
+                    'report_category_id' => $data['report']['report_category_id'] ?? null,
+                    'title' => $request->input('report.title'),
+                    'report_type' => $request->input('report.report_type'),
+                    'doctor_name' => $request->input('report.doctor_name'),
+                    'hospital_name' => $request->input('report.hospital_name'),
+                    'report_date' => $request->input('report.report_date'),
+                    'file_url' => $data['file_url'],
+                    'file_hash' => $data['file_hash'],
+                    'status' => ReportStatus::COMPLETED,
+                ]);
+
+                // 2. Create Knowledge
+                MedicalKnowledge::create([
+                    'report_id' => $report->id,
+                    'summary' => $data['knowledge']['summary'],
+                    'risk_level' => $data['knowledge']['risk_level'],
+                    'recommendations' => json_encode($data['knowledge']['recommendations']),
+                    'confidence_score' => $data['knowledge']['confidence_score'],
+                    'processing_time_ms' => 1500,
+                    'processed_at' => now(),
+                ]);
+
+                // 3. Create Entities (use edited fields if provided, fallback to staged data)
+                $entitiesInput = $request->input('entities') ?? $data['entities'];
+                foreach ($entitiesInput as $ent) {
+                    MedicalEntity::create([
+                        'report_id' => $report->id,
+                        'entity_type' => $ent['entity_type'] ?? 'vital',
+                        'entity_name' => $ent['entity_name'] ?? '',
+                        'value' => $ent['value'] ?? null,
+                        'unit' => $ent['unit'] ?? null,
+                        'reference_range' => $ent['reference_range'] ?? null,
+                        'status' => $ent['status'] ?? null,
+                        'confidence' => $ent['confidence'] ?? 100.00,
+                    ]);
+                }
+
+                // 4. Create Tags (use edited fields if provided, fallback to staged data)
+                $tagsInput = $request->input('tags') ?? $data['tags'];
+                foreach ($tagsInput as $tag) {
+                    ReportTag::create([
+                        'report_id' => $report->id,
+                        'tag' => $tag,
+                    ]);
+                }
+
+                // 5. Create timeline event
+                $report->timelineEvents()->create([
+                    'profile_id' => $report->profile_id,
+                    'event_type' => 'report_upload',
+                    'title' => 'Report Uploaded: ' . $report->title,
+                    'description' => 'Medical report ' . $report->title . ' was successfully saved and reviewed.',
+                    'event_date' => $report->report_date ?? now()->toDateString(),
+                    'importance' => 1,
+                ]);
+
+                return $report->id;
+            });
+
+            // Clean up cache
+            Cache::forget('temp_upload_' . $upload_id);
+
+            Log::info('Staged medical report finalized and saved', [
+                'upload_id' => $upload_id,
+                'report_id' => $reportId,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'report_id' => $reportId,
+            ], Response::HTTP_CREATED);
+        } catch (\Throwable $e) {
+            Log::error('Finalizing staged report failed', [
+                'upload_id' => $upload_id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return ApiResponse::error('Failed to finalize and save report.', Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+}

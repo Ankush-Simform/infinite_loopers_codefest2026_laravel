@@ -24,7 +24,7 @@ final class ProfileUpdateRequest extends ApiFormRequest
             'weight_kg' => ['nullable', 'numeric', 'min:0', 'max:999.99'],
             'emergency_contact_name' => ['nullable', 'string', 'max:255'],
             'emergency_contact_phone' => ['nullable', 'string', 'max:20'],
-            'profile_photo' => ['nullable', 'image', 'max:5120'],
+            'profile_photo' => ['nullable', 'image', 'max:10240'],
         ];
     }
 }
