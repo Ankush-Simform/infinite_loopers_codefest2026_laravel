@@ -10,9 +10,11 @@ use App\Models\MedicalReport;
 use App\Models\ReportCategory;
 use App\Models\TimelineEvent;
 use App\Models\ChatSession;
+use App\Notifications\Auth\VerifyEmailWithJwt;
 use App\Enums\Gender;
 use App\Enums\ProfileRelation;
 use App\Enums\ReportStatus;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
@@ -66,6 +68,8 @@ class AmrvApiTest extends TestCase
      */
     public function test_authentication_flow(): void
     {
+        Notification::fake();
+
         // 1. Test Registration
         $registerResponse = $this->postJson('/api/v1/auth/register', [
             'name' => 'Jane Doe',
@@ -76,7 +80,24 @@ class AmrvApiTest extends TestCase
         ]);
 
         $registerResponse->assertStatus(201)
-            ->assertJsonPath('success', true);
+            ->assertJsonPath('success', true)
+            ->assertJsonMissingPath('data.token')
+            ->assertJsonMissingPath('data.verification_token')
+            ->assertJsonPath('data.verification_required', false);
+
+        $registeredUser = User::where('email', 'janedoe@example.com')->firstOrFail();
+        Notification::assertNotSentTo($registeredUser, VerifyEmailWithJwt::class);
+
+        $this->assertTrue($registeredUser->refresh()->hasVerifiedEmail());
+
+        $verifiedLoginResponse = $this->postJson('/api/v1/auth/login', [
+            'email' => 'janedoe@example.com',
+            'password' => 'Password123!',
+        ]);
+
+        $verifiedLoginResponse->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonStructure(['data' => ['token']]);
 
         // 2. Test Login
         $loginResponse = $this->postJson('/api/v1/auth/login', [
@@ -325,5 +346,70 @@ class AmrvApiTest extends TestCase
             ->deleteJson('/api/v1/chats/' . $sessionId);
 
         $deleteResponse->assertOk();
+    }
+
+    public function test_new_profile_and_user_edit_routes(): void
+    {
+        // 1. Create a user and check "self" profile exists
+        $user = User::create([
+            'name' => 'Original Name',
+            'email' => 'original@example.com',
+            'password' => Hash::make('password'),
+        ]);
+
+        $token = app(\App\Services\JwtService::class)->generateToken($user);
+
+        // Ensure "self" profile exists via ensureSelfProfileExists logic in login
+        $this->postJson('/api/v1/auth/login', [
+            'email' => 'original@example.com',
+            'password' => 'password',
+        ])->assertOk();
+
+        $this->assertDatabaseHas('profiles', [
+            'user_id' => $user->id,
+            'name' => 'Original Name',
+            'email' => 'original@example.com',
+            'relation' => \App\Enums\ProfileRelation::SELF->value,
+        ]);
+
+        // 2. Test GET profiles/enums
+        $enumsResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+            ->getJson('/api/v1/profiles/enums');
+
+        $enumsResponse->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonStructure(['data' => ['relations', 'genders']]);
+
+        // 3. Test PUT auth/me to update user profile and sync with "self" profile
+        $updateResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+            ->putJson('/api/v1/auth/me', [
+                'name' => 'Updated Name',
+                'phone' => '+111111111',
+                'emergency_contact_name' => 'Emergency Name',
+                'emergency_contact_phone' => '+222222222',
+            ]);
+
+        $updateResponse->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.name', 'Updated Name')
+            ->assertJsonPath('data.phone', '+111111111')
+            ->assertJsonPath('data.emergency_contact_name', 'Emergency Name')
+            ->assertJsonPath('data.emergency_contact_phone', '+222222222');
+
+        // Assert User model is updated
+        $this->assertDatabaseHas('users', [
+            'id' => $user->id,
+            'name' => 'Updated Name',
+            'phone' => '+111111111',
+            'emergency_contact_name' => 'Emergency Name',
+            'emergency_contact_phone' => '+222222222',
+        ]);
+
+        // Assert Profile model is synced
+        $this->assertDatabaseHas('profiles', [
+            'user_id' => $user->id,
+            'name' => 'Updated Name',
+            'relation' => \App\Enums\ProfileRelation::SELF->value,
+        ]);
     }
 }

@@ -27,7 +27,7 @@ final class JwtAuthenticate
         }
 
         $token = substr($authorization, 7);
-        $payload = $this->jwtService->validateToken($token);
+        $payload = $this->jwtService->validateToken($token, JwtService::PURPOSE_AUTH);
 
         if (!$payload || !isset($payload['sub'])) {
             return ApiResponse::error('Unauthenticated.', Response::HTTP_UNAUTHORIZED);

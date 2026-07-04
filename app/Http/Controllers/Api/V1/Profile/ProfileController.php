@@ -266,6 +266,34 @@ final class ProfileController extends Controller
         }
     }
 
+    /**
+     * Get relations and genders enums for profile selection.
+     */
+    public function getEnums(Request $request): JsonResponse
+    {
+        try {
+            $relations = array_map(fn (\App\Enums\ProfileRelation $case) => [
+                'value' => $case->value,
+                'label' => ucfirst($case->value),
+            ], \App\Enums\ProfileRelation::cases());
+
+            $genders = array_map(fn (\App\Enums\Gender $case) => [
+                'value' => $case->value,
+                'label' => $case->value,
+            ], \App\Enums\Gender::cases());
+
+            return ApiResponse::success([
+                'relations' => $relations,
+                'genders' => $genders,
+            ], 'Enums retrieved successfully.');
+        } catch (\Throwable $e) {
+            Log::error('Error retrieving enums', [
+                'error' => $e->getMessage(),
+            ]);
+            return ApiResponse::error('Failed to retrieve enums.', Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
     private function profileData(Request $request): array
     {
         return array_filter(

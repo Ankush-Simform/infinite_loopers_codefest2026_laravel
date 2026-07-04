@@ -30,11 +30,14 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::post('register', [AuthController::class, 'register'])->name('register');
         Route::post('login', [AuthController::class, 'login'])->name('login');
         Route::post('google', [AuthController::class, 'google'])->name('google');
+        Route::post('email/verify', [AuthController::class, 'verifyEmailToken'])->name('verification.verify_token');
+        Route::post('email/resend', [AuthController::class, 'resendVerifica
+        tion'])->name('verification.resend');
 
         Route::middleware('auth.jwt')->group(function (): void {
             Route::get('me', [AuthController::class, 'me'])->name('me');
+            Route::put('me', [AuthController::class, 'updateMe'])->name('me.update');
             Route::post('logout', [AuthController::class, 'logout'])->name('logout');
-            Route::post('email/resend', [AuthController::class, 'resendVerification'])->name('verification.resend');
         });
     });
 
@@ -45,6 +48,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // Profile API (Plural profiles resources + singular fallback showSelf)
         Route::get('profile', [ProfileController::class, 'showSelf'])->name('profile.show');
         Route::put('profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
+        Route::get('profiles/enums', [ProfileController::class, 'getEnums'])->name('profiles.enums');
         Route::apiResource('profiles', ProfileController::class);
 
         // Reports API

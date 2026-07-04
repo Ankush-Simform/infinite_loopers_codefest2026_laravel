@@ -129,4 +129,10 @@ return [
         'ttl' => (int) env('JWT_TTL', 18000), // Default: 5 hours
     ],
 
+    'email_verification' => [
+        'ttl' => (int) env('EMAIL_VERIFICATION_JWT_TTL', 3600),
+        'frontend_verify_url' => env('FRONTEND_VERIFY_EMAIL_URL', env('APP_URL') . '/verify-email'),
+        'frontend_login_url' => env('FRONTEND_LOGIN_URL', env('APP_URL') . '/login'),
+    ],
+
 ];
