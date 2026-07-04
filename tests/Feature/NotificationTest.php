@@ -10,9 +10,17 @@ use App\Models\UserDevice;
 use App\Models\Notification;
 use App\Models\MedicalReport;
 use App\Jobs\SendPushNotificationJob;
+use App\Jobs\ProcessMedicalReportJob;
+use App\Events\ReportUploaded;
+use App\Events\OcrStarted;
+use App\Events\OcrCompleted;
+use App\Events\AiProcessing;
+use App\Events\ReportProcessingCompleted;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Event;
 use Tests\TestCase;
 
 class NotificationTest extends TestCase
@@ -216,7 +224,7 @@ class NotificationTest extends TestCase
         $stagedData = [
             'created_at' => now()->timestamp,
             'profile_id' => $this->profile->id,
-            'file_url' => 'https://res.cloudinary.com/demo/image/upload/v1570975200/sample.pdf',
+            'file_url' => 'https://amrvblobstorage.blob.core.windows.net/amrv-container/staging/sample.pdf',
             'file_hash' => 'dummy_hash',
             'report_type' => 'pdf',
             'report' => [
@@ -261,6 +269,112 @@ class NotificationTest extends TestCase
         // Assert Push Notification Job is dispatched
         Queue::assertPushed(SendPushNotificationJob::class, function ($job) use ($notification) {
             return $job->notification->id === $notification->id;
+        });
+    }
+
+    /**
+     * Test the full asynchronous report processing flow (WebSockets, Queues, Webhooks).
+     */
+    public function test_asynchronous_report_processing_flow(): void
+    {
+        Queue::fake([ProcessMedicalReportJob::class]);
+        Event::fake([
+            ReportUploaded::class,
+            OcrStarted::class,
+            OcrCompleted::class,
+            AiProcessing::class,
+            ReportProcessingCompleted::class
+        ]);
+
+        // Mock AzureBlobService
+        $this->mock(\App\Services\AzureBlobService::class, function ($mock) {
+            $mock->shouldReceive('uploadFile')
+                ->andReturn([
+                    'url' => 'https://amrvblobstorage.blob.core.windows.net/amrv-container/medical_reports/sample.pdf',
+                    'public_id' => 'medical_reports/sample.pdf',
+                    'format' => 'pdf',
+                    'bytes' => 500000,
+                ]);
+        });
+
+        $file = UploadedFile::fake()->create('report.pdf', 500, 'application/pdf');
+
+        // 1. Trigger POST /v1/reports
+        $response = $this->withHeaders(['Authorization' => 'Bearer ' . $this->token])
+            ->postJson('/api/v1/reports', [
+                'profile_id' => $this->profile->id,
+                'title' => 'Monthly Checkup Report',
+                'file' => $file,
+            ]);
+
+        $response->assertStatus(201)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('status', 'uploaded');
+
+        $reportId = $response->json('report_id');
+
+        // Assert report exists in database with UPLOADED status
+        $this->assertDatabaseHas('medical_reports', [
+            'id' => $reportId,
+            'status' => \App\Enums\ReportStatus::UPLOADED->value,
+            'file_url' => 'https://amrvblobstorage.blob.core.windows.net/amrv-container/medical_reports/sample.pdf',
+        ]);
+
+        // Assert ReportUploaded event was broadcasted
+        Event::assertDispatched(ReportUploaded::class, function ($event) use ($reportId) {
+            return $event->report->id === $reportId;
+        });
+
+        // Assert ProcessMedicalReportJob was queued
+        Queue::assertPushed(ProcessMedicalReportJob::class, function ($job) use ($reportId) {
+            return $job->reportId === $reportId;
+        });
+
+        // 2. Simulate Webhook call from the ML service
+        $webhookResponse = $this->postJson('/api/webhooks/report-processing-complete', [
+            'report_id' => $reportId,
+            'summary' => 'This is a complete AI generated summary of the report.',
+            'report_type' => 'blood_test',
+            'extracted_text' => 'Some raw extracted ocr text.',
+            'risk_level' => 'Low',
+            'confidence_score' => 95.5,
+            'recommendations' => ['Drink more water', 'Schedule follow up'],
+            'medical_entities' => [
+                [
+                    'entity_type' => 'vital',
+                    'entity_name' => 'Systolic Blood Pressure',
+                    'value' => '120',
+                    'unit' => 'mmHg',
+                ]
+            ],
+        ]);
+
+        $webhookResponse->assertOk()
+            ->assertJsonPath('success', true);
+
+        // Assert report status updated to COMPLETED in database
+        $this->assertDatabaseHas('medical_reports', [
+            'id' => $reportId,
+            'status' => \App\Enums\ReportStatus::COMPLETED->value,
+        ]);
+
+        // Assert knowledge was stored
+        $this->assertDatabaseHas('medical_knowledge', [
+            'report_id' => $reportId,
+            'summary' => 'This is a complete AI generated summary of the report.',
+            'risk_level' => 'Low',
+        ]);
+
+        // Assert entities were stored
+        $this->assertDatabaseHas('medical_entities', [
+            'report_id' => $reportId,
+            'entity_name' => 'Systolic Blood Pressure',
+            'value' => '120',
+        ]);
+
+        // Assert ReportProcessingCompleted event was broadcasted
+        Event::assertDispatched(ReportProcessingCompleted::class, function ($event) use ($reportId) {
+            return $event->report->id === $reportId;
         });
     }
 }

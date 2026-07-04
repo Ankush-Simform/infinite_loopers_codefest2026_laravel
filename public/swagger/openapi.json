@@ -315,7 +315,7 @@
       "post": {
         "tags": ["4. Medical Reports"],
         "summary": "Stage 1: Upload file to Staging (Review Flow)",
-        "description": "Uploads report document to Cloudinary and registers a temporary staged record.",
+        "description": "Uploads report document to Azure Storage and registers a temporary staged record.",
         "requestBody": {
           "required": true,
           "content": {
@@ -496,7 +496,7 @@
           }
         },
         "responses": {
-          "200": { "description": "Report updated and file replaced on Cloudinary." }
+          "200": { "description": "Report updated and file replaced on Azure Storage." }
         }
       },
       "delete": {
@@ -506,7 +506,7 @@
           { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
         ],
         "responses": {
-          "200": { "description": "Report deleted successfully (cleared from Cloudinary)." }
+          "200": { "description": "Report deleted successfully (cleared from Azure Storage)." }
         }
       }
     },

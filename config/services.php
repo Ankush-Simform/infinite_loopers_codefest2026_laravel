@@ -47,4 +47,10 @@ return [
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
     ],
 
+    'azure' => [
+        'storage_name' => env('AZURE_STORAGE_NAME'),
+        'storage_container' => env('AZURE_STORAGE_CONTAINER'),
+        'storage_key' => env('AZURE_STORAGE_KEY'),
+    ],
+
 ];

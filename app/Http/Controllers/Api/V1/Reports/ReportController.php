@@ -10,8 +10,10 @@ use App\Http\Requests\Api\V1\Reports\ReportStoreRequest;
 use App\Http\Requests\Api\V1\Reports\ReportUpdateRequest;
 use App\Http\Resources\Api\V1\Reports\ReportResource;
 use App\Models\MedicalReport;
-use App\Services\CloudinaryService;
+use App\Services\AzureBlobService;
 use App\Support\ApiResponse;
+use App\Events\ReportUploaded;
+use App\Jobs\ProcessMedicalReportJob;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -21,7 +23,7 @@ use Symfony\Component\HttpFoundation\Response;
 final class ReportController extends Controller
 {
     public function __construct(
-        protected CloudinaryService $cloudinaryService
+        protected AzureBlobService $azureBlobService
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -93,7 +95,7 @@ final class ReportController extends Controller
                 return ApiResponse::error('This file has already been uploaded for this profile.', Response::HTTP_CONFLICT);
             }
 
-            $uploadedFile = $this->cloudinaryService->uploadFile($file, 'medical_reports');
+            $uploadedFile = $this->azureBlobService->uploadFile($file, 'medical_reports');
 
             $report = DB::transaction(function () use ($request, $uploadedFile, $fileHash) {
                 $report = MedicalReport::create([
@@ -122,12 +124,24 @@ final class ReportController extends Controller
                 return $report;
             });
 
-            Log::info('Medical report stored successfully', [
-                'report_id' => $report->id,
-                'profile_id' => $report->profile_id,
-            ]);
+            // 1. Broadcast ReportUploaded Event
+            Log::info('Broadcasting ReportUploaded event', ['report_id' => $report->id]);
+            event(new ReportUploaded($report));
 
-            return ApiResponse::success(ReportResource::make($report), 'Medical report uploaded successfully.', Response::HTTP_CREATED);
+            // 2. Dispatch background ML report processing queue job
+            Log::info('Dispatching ProcessMedicalReportJob', ['report_id' => $report->id]);
+            ProcessMedicalReportJob::dispatch(
+                $report->id,
+                $report->file_url,
+                (int) $report->profile_id,
+                (int) $request->user()->id
+            );
+
+            return response()->json([
+                'success' => true,
+                'report_id' => $report->id,
+                'status' => 'uploaded',
+            ], Response::HTTP_CREATED);
         } catch (\Throwable $e) {
             Log::error('Error storing medical report', [
                 'user_id' => $request->user()?->id,
@@ -181,11 +195,11 @@ final class ReportController extends Controller
                     $file = $request->file('file');
                     $fileHash = hash_file('sha256', $file->getRealPath());
 
-                    // Delete old file from Cloudinary
-                    $this->deleteCloudinaryFile($report->file_url);
+                    // Delete old file from Azure Storage
+                    $this->deleteAzureFile($report->file_url);
 
                     // Upload new file
-                    $uploadedFile = $this->cloudinaryService->uploadFile($file, 'medical_reports');
+                    $uploadedFile = $this->azureBlobService->uploadFile($file, 'medical_reports');
 
                     $updateData['file_url'] = $uploadedFile['url'];
                     $updateData['file_hash'] = $fileHash;
@@ -218,8 +232,8 @@ final class ReportController extends Controller
             $report = $request->user()->medicalReports()->findOrFail($id);
 
             DB::transaction(function () use ($report): void {
-                // Delete file from Cloudinary
-                $this->deleteCloudinaryFile($report->file_url);
+                // Delete file from Azure Storage
+                $this->deleteAzureFile($report->file_url);
 
                 // Soft delete from database
                 $report->delete();
@@ -241,31 +255,20 @@ final class ReportController extends Controller
         }
     }
 
-    private function deleteCloudinaryFile(string $url): void
+    private function deleteAzureFile(string $url): void
     {
         try {
             $parsed = parse_url($url, PHP_URL_PATH);
             if ($parsed) {
-                $segments = explode('/', trim($parsed, '/'));
-                $uploadIndex = array_search('upload', $segments);
-                if ($uploadIndex !== false && isset($segments[$uploadIndex + 1])) {
-                    $publicIdSegments = array_slice($segments, $uploadIndex + 1);
-                    if (preg_match('/^v\d+$/', $publicIdSegments[0])) {
-                        array_shift($publicIdSegments);
-                    }
-                    $last = array_pop($publicIdSegments);
-                    $filename = pathinfo($last, PATHINFO_FILENAME);
-                    $publicIdSegments[] = $filename;
-                    $publicId = implode('/', $publicIdSegments);
-
-                    // Determine resource type: images are images, pdf is 'raw' in Cloudinary or 'image' if processed
-                    // For safety, Cloudinary auto resource type uploads might be raw/image. Let's try deleting.
-                    $this->cloudinaryService->deleteFile($publicId, 'image');
-                    $this->cloudinaryService->deleteFile($publicId, 'raw');
+                $parts = explode('/', trim($parsed, '/'));
+                if (count($parts) > 1) {
+                    array_shift($parts); // Remove container name
+                    $blobName = implode('/', $parts);
+                    $this->azureBlobService->deleteFile($blobName);
                 }
             }
         } catch (\Throwable $e) {
-            Log::warning('Failed to delete old cloudinary file', ['url' => $url, 'error' => $e->getMessage()]);
+            Log::warning('Failed to delete old Azure file', ['url' => $url, 'error' => $e->getMessage()]);
         }
     }
 }

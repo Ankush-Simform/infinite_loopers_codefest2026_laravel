@@ -11,7 +11,7 @@ use App\Models\MedicalReport;
 use App\Models\MedicalKnowledge;
 use App\Models\MedicalEntity;
 use App\Models\ReportTag;
-use App\Services\CloudinaryService;
+use App\Services\AzureBlobService;
 use App\Services\NotificationService;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -25,7 +25,7 @@ use Symfony\Component\HttpFoundation\Response;
 final class ReportUploadController extends Controller
 {
     public function __construct(
-        protected CloudinaryService $cloudinaryService,
+        protected AzureBlobService $azureBlobService,
         protected NotificationService $notificationService
     ) {}
 
@@ -56,8 +56,8 @@ final class ReportUploadController extends Controller
                 return ApiResponse::error('This file has already been uploaded for this profile.', Response::HTTP_CONFLICT);
             }
 
-            // Upload original file to Cloudinary
-            $uploaded = $this->cloudinaryService->uploadFile($file, 'medical_reports_staging');
+            // Upload original file to Azure Storage
+            $uploaded = $this->azureBlobService->uploadFile($file, 'staging');
 
             $uploadId = (string) Str::uuid();
 
