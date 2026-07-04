@@ -4,20 +4,17 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
-use App\Models\User;
-use App\Models\Profile;
-use App\Models\MedicalReport;
-use App\Models\ReportCategory;
-use App\Models\TimelineEvent;
-use App\Models\ChatSession;
 use App\Enums\Gender;
 use App\Enums\ProfileRelation;
-use App\Enums\ReportStatus;
+use App\Models\Profile;
+use App\Models\ReportCategory;
+use App\Models\User;
+use App\Services\AzureBlobService;
+use App\Services\JwtService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
 
 class AmrvApiTest extends TestCase
@@ -25,7 +22,9 @@ class AmrvApiTest extends TestCase
     use RefreshDatabase;
 
     protected User $user;
+
     protected Profile $profile;
+
     protected ReportCategory $category;
 
     protected function setUp(): void
@@ -89,7 +88,7 @@ class AmrvApiTest extends TestCase
 
         // 3. Test Me
         $token = $loginResponse->json('data.token');
-        $meResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+        $meResponse = $this->withHeaders(['Authorization' => 'Bearer '.$token])
             ->getJson('/api/v1/auth/me');
 
         $meResponse->assertOk()
@@ -101,16 +100,16 @@ class AmrvApiTest extends TestCase
      */
     public function test_profiles_crud(): void
     {
-        $token = app(\App\Services\JwtService::class)->generateToken($this->user);
+        $token = app(JwtService::class)->generateToken($this->user);
 
         // 1. List profiles
-        $listResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+        $listResponse = $this->withHeaders(['Authorization' => 'Bearer '.$token])
             ->getJson('/api/v1/profiles');
         $listResponse->assertOk()
             ->assertJsonCount(1, 'data');
 
         // 2. Create family profile
-        $createResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+        $createResponse = $this->withHeaders(['Authorization' => 'Bearer '.$token])
             ->postJson('/api/v1/profiles', [
                 'name' => 'Spouse Doe',
                 'relation' => 'family',
@@ -120,14 +119,14 @@ class AmrvApiTest extends TestCase
         $spouseProfileId = $createResponse->json('data.id');
 
         // 3. Get profile details
-        $showResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-            ->getJson('/api/v1/profiles/' . $spouseProfileId);
+        $showResponse = $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->getJson('/api/v1/profiles/'.$spouseProfileId);
         $showResponse->assertOk()
             ->assertJsonPath('data.name', 'Spouse Doe');
 
         // 4. Update profile details
-        $updateResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-            ->postJson('/api/v1/profiles/' . $spouseProfileId, [
+        $updateResponse = $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->postJson('/api/v1/profiles/'.$spouseProfileId, [
                 '_method' => 'PUT',
                 'name' => 'Spouse Doe Updated',
             ]);
@@ -135,8 +134,8 @@ class AmrvApiTest extends TestCase
             ->assertJsonPath('data.name', 'Spouse Doe Updated');
 
         // 5. Delete profile
-        $deleteResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-            ->deleteJson('/api/v1/profiles/' . $spouseProfileId);
+        $deleteResponse = $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->deleteJson('/api/v1/profiles/'.$spouseProfileId);
         $deleteResponse->assertOk();
     }
 
@@ -145,9 +144,9 @@ class AmrvApiTest extends TestCase
      */
     public function test_home_dashboard(): void
     {
-        $token = app(\App\Services\JwtService::class)->generateToken($this->user);
+        $token = app(JwtService::class)->generateToken($this->user);
 
-        $response = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+        $response = $this->withHeaders(['Authorization' => 'Bearer '.$token])
             ->getJson('/api/v1/home');
 
         $response->assertOk()
@@ -168,9 +167,9 @@ class AmrvApiTest extends TestCase
      */
     public function test_categories_listing(): void
     {
-        $token = app(\App\Services\JwtService::class)->generateToken($this->user);
+        $token = app(JwtService::class)->generateToken($this->user);
 
-        $response = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+        $response = $this->withHeaders(['Authorization' => 'Bearer '.$token])
             ->getJson('/api/v1/categories');
 
         $response->assertOk()
@@ -182,10 +181,10 @@ class AmrvApiTest extends TestCase
      */
     public function test_staged_reports_review_workflow(): void
     {
-        $token = app(\App\Services\JwtService::class)->generateToken($this->user);
+        $token = app(JwtService::class)->generateToken($this->user);
         Storage::fake('public');
 
-        $this->mock(\App\Services\AzureBlobService::class, function ($mock) {
+        $this->mock(AzureBlobService::class, function ($mock) {
             $mock->shouldReceive('uploadFile')
                 ->andReturn([
                     'url' => 'https://amrvblobstorage.blob.core.windows.net/amrv-container/staging/sample.pdf',
@@ -198,7 +197,7 @@ class AmrvApiTest extends TestCase
         $file = UploadedFile::fake()->create('report.pdf', 500, 'application/pdf');
 
         // 1. Stage 1: Upload File
-        $uploadResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+        $uploadResponse = $this->withHeaders(['Authorization' => 'Bearer '.$token])
             ->postJson('/api/v1/reports/upload', [
                 'profile_id' => $this->profile->id,
                 'file' => $file,
@@ -210,19 +209,19 @@ class AmrvApiTest extends TestCase
         $uploadId = $uploadResponse->json('upload_id');
 
         // 2. Stage 2: Check Status
-        $statusResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-            ->getJson('/api/v1/reports/upload/' . $uploadId . '/status');
+        $statusResponse = $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->getJson('/api/v1/reports/upload/'.$uploadId.'/status');
         $statusResponse->assertOk();
 
         // 3. Stage 3: Get Review data
-        $reviewResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-            ->getJson('/api/v1/reports/upload/' . $uploadId . '/review');
+        $reviewResponse = $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->getJson('/api/v1/reports/upload/'.$uploadId.'/review');
         $reviewResponse->assertOk()
             ->assertJsonPath('upload_id', $uploadId);
 
         // 4. Stage 4: Save report
-        $saveResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-            ->postJson('/api/v1/reports/upload/' . $uploadId . '/save', [
+        $saveResponse = $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->postJson('/api/v1/reports/upload/'.$uploadId.'/save', [
                 'profile_id' => $this->profile->id,
                 'report' => [
                     'title' => 'My Reviewed Staged Blood Report',
@@ -237,9 +236,9 @@ class AmrvApiTest extends TestCase
                         'entity_name' => 'Systolic Blood Pressure',
                         'value' => '120',
                         'unit' => 'mmHg',
-                    ]
+                    ],
                 ],
-                'tags' => ['blood-test']
+                'tags' => ['blood-test'],
             ]);
 
         $saveResponse->assertStatus(201)
@@ -259,10 +258,10 @@ class AmrvApiTest extends TestCase
      */
     public function test_timeline_crud(): void
     {
-        $token = app(\App\Services\JwtService::class)->generateToken($this->user);
+        $token = app(JwtService::class)->generateToken($this->user);
 
         // 1. Create Event
-        $response = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+        $response = $this->withHeaders(['Authorization' => 'Bearer '.$token])
             ->postJson('/api/v1/timelines', [
                 'profile_id' => $this->profile->id,
                 'event_type' => 'checkup',
@@ -276,13 +275,13 @@ class AmrvApiTest extends TestCase
         $eventId = $response->json('data.id');
 
         // 2. List & search
-        $list = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+        $list = $this->withHeaders(['Authorization' => 'Bearer '.$token])
             ->getJson('/api/v1/timelines?search=Annual');
         $list->assertOk()->assertJsonCount(1, 'data');
 
         // 3. Delete
-        $delete = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-            ->deleteJson('/api/v1/timelines/' . $eventId);
+        $delete = $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->deleteJson('/api/v1/timelines/'.$eventId);
         $delete->assertOk();
     }
 
@@ -291,10 +290,10 @@ class AmrvApiTest extends TestCase
      */
     public function test_chat_crud(): void
     {
-        $token = app(\App\Services\JwtService::class)->generateToken($this->user);
+        $token = app(JwtService::class)->generateToken($this->user);
 
         // 1. Create Chat Session
-        $sessionResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+        $sessionResponse = $this->withHeaders(['Authorization' => 'Bearer '.$token])
             ->postJson('/api/v1/chats', [
                 'title' => 'My Doctor Chat',
             ]);
@@ -303,8 +302,8 @@ class AmrvApiTest extends TestCase
         $sessionId = $sessionResponse->json('data.id');
 
         // 2. Rename session
-        $renameResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-            ->putJson('/api/v1/chats/' . $sessionId, [
+        $renameResponse = $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->putJson('/api/v1/chats/'.$sessionId, [
                 'title' => 'My Renamed Chat',
             ]);
 
@@ -312,17 +311,67 @@ class AmrvApiTest extends TestCase
             ->assertJsonPath('data.title', 'My Renamed Chat');
 
         // 3. Send message
-        $messageResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-            ->postJson('/api/v1/chats/' . $sessionId . '/messages', [
+        $messageResponse = $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->post('/api/v1/chats/'.$sessionId.'/messages', [
                 'content' => 'hello',
             ]);
 
-        $messageResponse->assertOk()
-            ->assertJsonStructure(['success', 'message', 'data' => ['user_message', 'assistant_message']]);
+        $messageResponse->assertOk();
+        $this->assertNotEmpty($messageResponse->streamedContent());
+
+        // Assert database records
+        $this->assertDatabaseHas('chat_messages', [
+            'chat_session_id' => $sessionId,
+            'role' => 'user',
+            'content' => 'hello',
+        ]);
+
+        $this->assertDatabaseHas('chat_messages', [
+            'chat_session_id' => $sessionId,
+            'role' => 'assistant',
+        ]);
+
+        // 3.1 Verify messages retrieval includes correct schema keys
+        $listMessagesResponse = $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->getJson('/api/v1/chats/'.$sessionId.'/messages');
+
+        $listMessagesResponse->assertOk()
+            ->assertJsonStructure([
+                'success',
+                'message',
+                'data' => [
+                    '*' => [
+                        'id',
+                        'sender',
+                        'message',
+                        'created_at',
+                        'attachments',
+                    ],
+                ],
+            ]);
+
+        // Verify index list uses Resource structure
+        $listSessionsResponse = $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->getJson('/api/v1/chats');
+        $listSessionsResponse->assertOk()
+            ->assertJsonStructure([
+                'success',
+                'message',
+                'data' => [
+                    '*' => [
+                        'id',
+                        'user_id',
+                        'title',
+                        'last_message_at',
+                        'created_at',
+                        'updated_at',
+                    ],
+                ],
+            ]);
 
         // 4. Delete Chat Session
-        $deleteResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-            ->deleteJson('/api/v1/chats/' . $sessionId);
+        $deleteResponse = $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->deleteJson('/api/v1/chats/'.$sessionId);
 
         $deleteResponse->assertOk();
     }

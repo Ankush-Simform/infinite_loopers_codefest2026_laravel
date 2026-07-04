@@ -31,7 +31,7 @@ final class TimelineController extends Controller
                 $search = $request->query('search');
                 $query->where(function ($q) use ($search): void {
                     $q->where('title', 'like', "%{$search}%")
-                      ->orWhere('description', 'like', "%{$search}%");
+                        ->orWhere('description', 'like', "%{$search}%");
                 });
             }
 
@@ -51,6 +51,7 @@ final class TimelineController extends Controller
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
+
             return ApiResponse::error('An error occurred while listing timeline events.', Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
@@ -79,6 +80,7 @@ final class TimelineController extends Controller
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
+
             return ApiResponse::error('An error occurred while creating timeline event.', Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
@@ -100,6 +102,7 @@ final class TimelineController extends Controller
                 'user_id' => $request->user()?->id,
                 'error' => $e->getMessage(),
             ]);
+
             return ApiResponse::error('Timeline event not found or access denied.', Response::HTTP_NOT_FOUND);
         }
     }
@@ -136,6 +139,7 @@ final class TimelineController extends Controller
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
+
             return ApiResponse::error('An error occurred while updating the timeline event.', Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
@@ -158,6 +162,7 @@ final class TimelineController extends Controller
                 'user_id' => $request->user()?->id,
                 'error' => $e->getMessage(),
             ]);
+
             return ApiResponse::error('Timeline event not found or access denied.', Response::HTTP_NOT_FOUND);
         }
     }

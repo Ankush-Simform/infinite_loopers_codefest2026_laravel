@@ -8,13 +8,14 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Profile\ProfileStoreRequest;
 use App\Http\Requests\Api\V1\Profile\ProfileUpdateRequest;
 use App\Http\Resources\Api\V1\ProfileResource;
-use App\Support\ApiResponse;
 use App\Services\AzureBlobService;
+use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\Response;
 
 final class ProfileController extends Controller
@@ -43,6 +44,7 @@ final class ProfileController extends Controller
                 'user_id' => $request->user()?->id,
                 'error' => $e->getMessage(),
             ]);
+
             return ApiResponse::error('Failed to retrieve profiles.', Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
@@ -58,16 +60,19 @@ final class ProfileController extends Controller
 
             if ($profile === null) {
                 Log::info('Self profile retrieve attempted but none found', ['user_id' => $user->id]);
+
                 return ApiResponse::success(null, 'No profile found.');
             }
 
             Log::info('Self profile retrieved successfully', ['user_id' => $user->id, 'profile_id' => $profile->id]);
+
             return ApiResponse::success(ProfileResource::make($profile), 'Profile retrieved.');
         } catch (\Throwable $e) {
             Log::error('Error retrieving self profile', [
                 'user_id' => $request->user()?->id,
                 'error' => $e->getMessage(),
             ]);
+
             return ApiResponse::error('An error occurred while retrieving the profile.', Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
@@ -111,6 +116,7 @@ final class ProfileController extends Controller
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
+
             return ApiResponse::error('An error occurred while creating the profile.', Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
@@ -135,6 +141,7 @@ final class ProfileController extends Controller
                 'user_id' => $request->user()?->id,
                 'error' => $e->getMessage(),
             ]);
+
             return ApiResponse::error('Profile not found or access denied.', Response::HTTP_NOT_FOUND);
         }
     }
@@ -179,6 +186,7 @@ final class ProfileController extends Controller
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
+
             return ApiResponse::error('An error occurred while updating the profile.', Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
@@ -211,6 +219,7 @@ final class ProfileController extends Controller
                 'user_id' => $request->user()?->id,
                 'error' => $e->getMessage(),
             ]);
+
             return ApiResponse::error('Profile not found or access denied.', Response::HTTP_NOT_FOUND);
         }
     }
@@ -236,8 +245,9 @@ final class ProfileController extends Controller
 
             // Verify old password if applicable
             if ($user->password !== null) {
-                if (!Hash::check($request->old_password, $user->password)) {
+                if (! Hash::check($request->old_password, $user->password)) {
                     Log::warning('Password update failed: Old password incorrect', ['user_id' => $user->id]);
+
                     return ApiResponse::error('The provided old password is incorrect.', Response::HTTP_UNPROCESSABLE_ENTITY);
                 }
             }
@@ -250,7 +260,7 @@ final class ProfileController extends Controller
             Log::info('User password updated successfully', ['user_id' => $user->id]);
 
             return ApiResponse::success(null, 'Password updated successfully.');
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Validation failed',
@@ -262,6 +272,7 @@ final class ProfileController extends Controller
                 'user_id' => $user->id,
                 'error' => $e->getMessage(),
             ]);
+
             return ApiResponse::error('An error occurred while updating the password.', Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }

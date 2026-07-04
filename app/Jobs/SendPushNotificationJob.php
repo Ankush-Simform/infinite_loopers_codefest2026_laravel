@@ -30,10 +30,11 @@ final class SendPushNotificationJob implements ShouldQueue
     public function handle(FcmService $fcmService): void
     {
         $user = $this->notification->user;
-        if (!$user) {
+        if (! $user) {
             Log::warning('SendPushNotificationJob aborted: Notification has no associated user.', [
                 'notification_id' => $this->notification->id,
             ]);
+
             return;
         }
 
@@ -45,6 +46,7 @@ final class SendPushNotificationJob implements ShouldQueue
                 'user_id' => $user->id,
                 'notification_id' => $this->notification->id,
             ]);
+
             return;
         }
 
@@ -65,11 +67,11 @@ final class SendPushNotificationJob implements ShouldQueue
                 $dataPayload
             );
 
-            if (!$success) {
+            if (! $success) {
                 // Token is unregistered or invalid, deactivate it
                 Log::info('Deactivating invalid or expired FCM token', [
                     'device_id' => $device->id,
-                    'fcm_token' => substr($device->fcm_token, 0, 15) . '...',
+                    'fcm_token' => substr($device->fcm_token, 0, 15).'...',
                 ]);
                 $device->update(['is_active' => false]);
             }

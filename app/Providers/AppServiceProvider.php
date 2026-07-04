@@ -2,6 +2,9 @@
 
 namespace App\Providers;
 
+use App\Contracts\AiServiceContract;
+use App\Integrations\Flask\FlaskApiService;
+use App\Services\MockAiService;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -12,8 +15,14 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(
-            \App\Contracts\AiServiceContract::class,
-            \App\Services\MockAiService::class
+            AiServiceContract::class,
+            function ($app) {
+                if (config('services.flask.base_url') && config('app.env') !== 'testing') {
+                    return $app->make(FlaskApiService::class);
+                }
+
+                return $app->make(MockAiService::class);
+            }
         );
     }
 

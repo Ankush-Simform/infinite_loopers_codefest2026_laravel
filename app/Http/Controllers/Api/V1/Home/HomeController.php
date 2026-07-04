@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api\V1\Home;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\Api\V1\Chat\ChatSessionResource;
 use App\Http\Resources\Api\V1\ProfileResource;
 use App\Http\Resources\Api\V1\Reports\ReportResource;
 use App\Http\Resources\Api\V1\TimelineResource;
-use App\Http\Resources\Api\V1\Chat\ChatSessionResource;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -30,11 +30,11 @@ final class HomeController extends Controller
                     'latest_report_date' => $profile ? $profile->medicalReports()->latest('report_date')->value('report_date')?->toDateString() : null,
                     'total_chats' => $user->chatSessions()->count(),
                 ],
-                'latest_reports' => $profile 
-                    ? ReportResource::collection($profile->medicalReports()->with('category')->latest('report_date')->limit(3)->get()) 
+                'latest_reports' => $profile
+                    ? ReportResource::collection($profile->medicalReports()->with('category')->latest('report_date')->limit(3)->get())
                     : [],
-                'latest_timeline' => $profile 
-                    ? TimelineResource::collection($profile->timelineEvents()->latest('event_date')->latest('id')->limit(3)->get()) 
+                'latest_timeline' => $profile
+                    ? TimelineResource::collection($profile->timelineEvents()->latest('event_date')->latest('id')->limit(3)->get())
                     : [],
                 'recent_chat' => ($recentChatSession = $user->chatSessions()->latest('last_message_at')->first())
                     ? ChatSessionResource::make($recentChatSession)

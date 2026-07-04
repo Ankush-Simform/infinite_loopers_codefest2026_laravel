@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Log;
 final class JwtService
 {
     private string $secret;
+
     private int $ttl; // in seconds
 
     public function __construct()
@@ -25,7 +26,7 @@ final class JwtService
     public function generateToken(User $user): string
     {
         $header = json_encode(['alg' => 'HS256', 'typ' => 'JWT']);
-        
+
         $payload = json_encode([
             'sub' => $user->id,
             'email' => $user->email,
@@ -36,10 +37,10 @@ final class JwtService
         $base64UrlHeader = $this->base64UrlEncode($header);
         $base64UrlPayload = $this->base64UrlEncode($payload);
 
-        $signature = hash_hmac('sha256', $base64UrlHeader . "." . $base64UrlPayload, $this->secret, true);
+        $signature = hash_hmac('sha256', $base64UrlHeader.'.'.$base64UrlPayload, $this->secret, true);
         $base64UrlSignature = $this->base64UrlEncode($signature);
 
-        return $base64UrlHeader . "." . $base64UrlPayload . "." . $base64UrlSignature;
+        return $base64UrlHeader.'.'.$base64UrlPayload.'.'.$base64UrlSignature;
     }
 
     /**
@@ -55,9 +56,9 @@ final class JwtService
         [$base64UrlHeader, $base64UrlPayload, $base64UrlSignature] = $parts;
 
         $signature = $this->base64UrlDecode($base64UrlSignature);
-        $expectedSignature = hash_hmac('sha256', $base64UrlHeader . "." . $base64UrlPayload, $this->secret, true);
+        $expectedSignature = hash_hmac('sha256', $base64UrlHeader.'.'.$base64UrlPayload, $this->secret, true);
 
-        if (!hash_equals($signature, $expectedSignature)) {
+        if (! hash_equals($signature, $expectedSignature)) {
             return null;
         }
 
@@ -68,6 +69,7 @@ final class JwtService
 
         if (isset($payload['exp']) && $payload['exp'] < time()) {
             Log::warning('JWT token expired', ['user_id' => $payload['sub'] ?? null]);
+
             return null;
         }
 
