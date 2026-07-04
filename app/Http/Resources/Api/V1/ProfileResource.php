@@ -21,9 +21,9 @@ final class ProfileResource extends JsonResource
             'gender' => $this->gender,
             'height_cm' => $this->height_cm,
             'weight_kg' => $this->weight_kg,
-            'emergency_contact_name' => $this->emergency_contact_name,
-            'emergency_contact_phone' => $this->emergency_contact_phone,
-            'profile_photo_url' => $this->when($this->profile_photo_path, fn () => Storage::disk('public')->url($this->profile_photo_path)),
+            'emergency_contact_name' => $this->user?->emergency_contact_name,
+            'emergency_contact_phone' => $this->user?->emergency_contact_phone,
+            'profile_photo_url' => $this->profile_photo_path ? (str_starts_with($this->profile_photo_path, 'http') ? $this->profile_photo_path : Storage::disk('public')->url($this->profile_photo_path)) : null,
             'created_at' => $this->created_at?->toDateTimeString(),
             'updated_at' => $this->updated_at?->toDateTimeString(),
         ];
