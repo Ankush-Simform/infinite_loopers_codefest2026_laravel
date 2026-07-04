@@ -9,7 +9,7 @@ use Cloudinary\Api\Upload\UploadApi;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
 
-final class CloudinaryService
+class CloudinaryService
 {
     public function __construct()
     {

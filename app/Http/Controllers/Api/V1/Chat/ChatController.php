@@ -157,7 +157,7 @@ final class ChatController extends Controller
             }
 
             // Perform in a transaction to ensure both messages and session updates are consistent
-            $messages = DB::transaction(function () use ($request, $session, $reportUrl): array {
+            $messages = DB::transaction(function () use ($request, $session, $reportUrl, $history): array {
                 // 1. Save user's message
                 $userMessage = $session->messages()->create([
                     'report_id' => $request->report_id,

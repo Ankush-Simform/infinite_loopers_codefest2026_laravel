@@ -45,8 +45,8 @@ class AmrvApiTest extends TestCase
             'email' => 'johndoe@example.com',
             'phone' => '+1234567890',
             'password' => Hash::make('password'),
-            'email_verified_at' => now(),
         ]);
+        $this->user->markEmailAsVerified();
 
         // Create user profile
         $this->profile = $this->user->profiles()->create([
@@ -113,7 +113,7 @@ class AmrvApiTest extends TestCase
         $createResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
             ->postJson('/api/v1/profiles', [
                 'name' => 'Spouse Doe',
-                'relation' => 'spouse',
+                'relation' => 'family',
                 'email' => 'spouse@example.com',
             ]);
         $createResponse->assertStatus(201);
@@ -184,6 +184,16 @@ class AmrvApiTest extends TestCase
     {
         $token = app(\App\Services\JwtService::class)->generateToken($this->user);
         Storage::fake('public');
+
+        $this->mock(\App\Services\CloudinaryService::class, function ($mock) {
+            $mock->shouldReceive('uploadFile')
+                ->andReturn([
+                    'url' => 'https://res.cloudinary.com/demo/image/upload/v1570975200/sample.pdf',
+                    'public_id' => 'sample_id',
+                    'format' => 'pdf',
+                    'bytes' => 500000,
+                ]);
+        });
 
         $file = UploadedFile::fake()->create('report.pdf', 500, 'application/pdf');
 

@@ -9,6 +9,8 @@ use App\Http\Controllers\Api\V1\Chat\ChatController;
 use App\Http\Controllers\Api\V1\Home\HomeController;
 use App\Http\Controllers\Api\V1\Timeline\TimelineController;
 use App\Http\Controllers\Api\V1\System\StatusController;
+use App\Http\Controllers\Api\V1\Devices\DeviceController;
+use App\Http\Controllers\Api\V1\Notifications\NotificationController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('status', StatusController::class)->name('api.status');
@@ -73,5 +75,14 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::get('chats/{id}/messages', [ChatController::class, 'messages'])->name('chats.messages');
         Route::post('chats/{id}/messages', [ChatController::class, 'sendMessage'])->name('chats.send_message');
         Route::delete('chats/{id}', [ChatController::class, 'destroy'])->name('chats.destroy');
+
+        // Notifications API
+        Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
+        Route::patch('notifications/{id}/read', [NotificationController::class, 'read'])->name('notifications.read');
+        Route::post('notifications/read-all', [NotificationController::class, 'readAll'])->name('notifications.read_all');
+
+        // Device Management API
+        Route::post('devices', [DeviceController::class, 'register'])->name('devices.register');
+        Route::delete('devices', [DeviceController::class, 'deregister'])->name('devices.deregister');
     });
 });

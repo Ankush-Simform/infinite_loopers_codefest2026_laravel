@@ -36,7 +36,9 @@ final class HomeController extends Controller
                 'latest_timeline' => $profile 
                     ? TimelineResource::collection($profile->timelineEvents()->latest('event_date')->latest('id')->limit(3)->get()) 
                     : [],
-                'recent_chat' => ChatSessionResource::make($user->chatSessions()->latest('last_message_at')->first()),
+                'recent_chat' => ($recentChatSession = $user->chatSessions()->latest('last_message_at')->first())
+                    ? ChatSessionResource::make($recentChatSession)
+                    : null,
             ];
 
             Log::info('Home dashboard retrieved successfully', [

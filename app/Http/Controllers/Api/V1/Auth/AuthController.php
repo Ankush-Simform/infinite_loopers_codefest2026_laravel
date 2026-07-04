@@ -49,7 +49,6 @@ final class AuthController extends Controller
             return ApiResponse::success(
                 [
                     'token' => $token,
-                    'token_type' => 'Bearer',
                     'user' => UserResource::make($user->load('profile')),
                 ],
                 'Registration successful. Please verify your email address.',
@@ -90,7 +89,6 @@ final class AuthController extends Controller
 
             return ApiResponse::success([
                 'token' => $token,
-                'token_type' => 'Bearer',
                 'user' => UserResource::make($user->load('profile')),
             ], 'Login successful.');
         } catch (\Throwable $e) {
@@ -151,7 +149,6 @@ final class AuthController extends Controller
 
             return ApiResponse::success([
                 'token' => $token,
-                'token_type' => 'Bearer',
                 'user' => UserResource::make($user->load('profile')),
             ], 'Google login successful.');
         } catch (\Throwable $e) {

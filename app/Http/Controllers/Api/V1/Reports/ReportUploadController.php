@@ -12,6 +12,7 @@ use App\Models\MedicalKnowledge;
 use App\Models\MedicalEntity;
 use App\Models\ReportTag;
 use App\Services\CloudinaryService;
+use App\Services\NotificationService;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -24,7 +25,8 @@ use Symfony\Component\HttpFoundation\Response;
 final class ReportUploadController extends Controller
 {
     public function __construct(
-        protected CloudinaryService $cloudinaryService
+        protected CloudinaryService $cloudinaryService,
+        protected NotificationService $notificationService
     ) {}
 
     /**
@@ -75,7 +77,7 @@ final class ReportUploadController extends Controller
                 ],
                 'knowledge' => [
                     'summary' => 'This report presents general vitals and blood values. Most parameters including blood sugar and triglycerides are within normal ranges. Suggesting standard dietary routine.',
-                    'risk_level' => 'low',
+                    'risk_level' => 'Low',
                     'recommendations' => [
                         'Continue regular hydration.',
                         'Schedule follow-up check in 6 months.',
@@ -291,6 +293,26 @@ final class ReportUploadController extends Controller
 
             // Clean up cache
             Cache::forget('temp_upload_' . $upload_id);
+
+            // Send in-app and push notification to the user
+            try {
+                $user = $request->user();
+                if ($user) {
+                    $report = MedicalReport::find($reportId);
+                    $this->notificationService->send(
+                        $user,
+                        'report_processed',
+                        'Medical Report Processed',
+                        'Your medical report "' . ($report?->title ?? 'New Report') . '" has been successfully analyzed.',
+                        ['report_id' => $reportId]
+                    );
+                }
+            } catch (\Throwable $ne) {
+                Log::error('Failed to trigger notification for report save', [
+                    'report_id' => $reportId,
+                    'error' => $ne->getMessage(),
+                ]);
+            }
 
             Log::info('Staged medical report finalized and saved', [
                 'upload_id' => $upload_id,
