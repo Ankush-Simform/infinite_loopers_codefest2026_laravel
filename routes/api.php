@@ -11,9 +11,13 @@ use App\Http\Controllers\Api\V1\Timeline\TimelineController;
 use App\Http\Controllers\Api\V1\System\StatusController;
 use App\Http\Controllers\Api\V1\Devices\DeviceController;
 use App\Http\Controllers\Api\V1\Notifications\NotificationController;
+use App\Http\Controllers\Api\V1\Reports\WebhookController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('status', StatusController::class)->name('api.status');
+
+Route::post('webhooks/report-processing-complete', [WebhookController::class, 'handle'])
+    ->name('api.webhooks.report_processing_complete');
 
 Route::get('login', function () {
     return \App\Support\ApiResponse::error('Unauthenticated.', \Symfony\Component\HttpFoundation\Response::HTTP_UNAUTHORIZED);
@@ -56,6 +60,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
         Route::post('reports', [ReportController::class, 'store'])->name('reports.store');
         Route::get('reports/{id}', [ReportController::class, 'show'])->name('reports.show');
+        Route::get('reports/{id}/file', [ReportController::class, 'showFile'])->name('reports.file');
         Route::put('reports/{id}', [ReportController::class, 'update'])->name('reports.update');
         Route::delete('reports/{id}', [ReportController::class, 'destroy'])->name('reports.destroy');
 
