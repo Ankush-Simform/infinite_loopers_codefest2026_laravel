@@ -698,6 +698,88 @@
           "200": { "description": "Returns user message and generated AI reply." }
         }
       }
+    },
+    "/notifications": {
+      "get": {
+        "tags": ["7. Notifications"],
+        "summary": "List user notifications (paginated)",
+        "parameters": [
+          { "name": "unread_only", "in": "query", "required": false, "schema": { "type": "boolean", "default": false } },
+          { "name": "per_page", "in": "query", "required": false, "schema": { "type": "integer", "default": 15 } }
+        ],
+        "responses": {
+          "200": { "description": "Notifications list returned." }
+        }
+      }
+    },
+    "/notifications/{id}/read": {
+      "patch": {
+        "tags": ["7. Notifications"],
+        "summary": "Mark a single notification as read",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Notification marked as read." },
+          "404": { "description": "Notification not found." }
+        }
+      }
+    },
+    "/notifications/read-all": {
+      "post": {
+        "tags": ["7. Notifications"],
+        "summary": "Mark all unread notifications as read",
+        "responses": {
+          "200": { "description": "All notifications marked as read." }
+        }
+      }
+    },
+    "/devices": {
+      "post": {
+        "tags": ["8. Devices"],
+        "summary": "Register or update a device FCM token",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["fcm_token"],
+                "properties": {
+                  "fcm_token": { "type": "string", "example": "fcm_token_string_example_12345" },
+                  "device_name": { "type": "string", "example": "iPhone 15 Pro" },
+                  "platform": { "type": "string", "enum": ["android", "ios", "web"], "example": "ios" },
+                  "app_version": { "type": "string", "example": "1.0.0" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Device token registered successfully." }
+        }
+      },
+      "delete": {
+        "tags": ["8. Devices"],
+        "summary": "De-register a device FCM token",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["fcm_token"],
+                "properties": {
+                  "fcm_token": { "type": "string", "example": "fcm_token_string_example_12345" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Device token de-registered successfully." }
+        }
+      }
     }
   },
   "components": {
