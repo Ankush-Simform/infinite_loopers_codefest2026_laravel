@@ -150,7 +150,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"id_token\": \"YOUR_GOOGLE_ID_TOKEN_HERE\"\n}",
+							"raw": "{\n    \"id_token\": \"mock_token_john\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"

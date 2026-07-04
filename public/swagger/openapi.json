@@ -76,6 +76,7 @@
       "post": {
         "tags": ["1. Authentication"],
         "summary": "Log in or Register via Google account",
+        "description": "Signs in or registers a user via Google. For local development and testing, you can pass a mock token prefixed with 'mock_token_' (e.g. 'mock_token_john') to log in instantly without hitting the live Google APIs.",
         "security": [],
         "requestBody": {
           "required": true,
@@ -85,7 +86,7 @@
                 "type": "object",
                 "required": ["id_token"],
                 "properties": {
-                  "id_token": { "type": "string", "example": "YOUR_GOOGLE_ID_TOKEN_HERE" }
+                  "id_token": { "type": "string", "example": "mock_token_john", "description": "Google ID token or 'mock_token_{username}' for local testing" }
                 }
               }
             }
