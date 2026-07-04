@@ -43,4 +43,9 @@ class ChatMessage extends Model
     {
         return $this->belongsTo(MedicalReport::class, 'report_id');
     }
+
+    public function attachments()
+    {
+        return $this->hasMany(ChatAttachment::class);
+    }
 }
