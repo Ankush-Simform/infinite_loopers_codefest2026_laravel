@@ -56,6 +56,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
         Route::post('reports', [ReportController::class, 'store'])->name('reports.store');
         Route::get('reports/{id}', [ReportController::class, 'show'])->name('reports.show');
+        Route::get('reports/{id}/file', [ReportController::class, 'showFile'])->name('reports.file');
         Route::put('reports/{id}', [ReportController::class, 'update'])->name('reports.update');
         Route::delete('reports/{id}', [ReportController::class, 'destroy'])->name('reports.destroy');
 

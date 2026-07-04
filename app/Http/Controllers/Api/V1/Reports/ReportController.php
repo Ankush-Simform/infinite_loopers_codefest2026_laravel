@@ -255,6 +255,41 @@ final class ReportController extends Controller
         }
     }
 
+    public function showFile(Request $request, int $id)
+    {
+        try {
+            $report = $request->user()->medicalReports()->findOrFail($id);
+            $url = $report->file_url;
+
+            $parsed = parse_url($url, PHP_URL_PATH);
+            if (!$parsed) {
+                return ApiResponse::error('Invalid report file path.', Response::HTTP_NOT_FOUND);
+            }
+
+            $parts = explode('/', trim($parsed, '/'));
+            if (count($parts) <= 1) {
+                return ApiResponse::error('Invalid report file path structure.', Response::HTTP_NOT_FOUND);
+            }
+
+            array_shift($parts); // Remove container name
+            $blobName = implode('/', $parts);
+
+            $fileData = $this->azureBlobService->getFile($blobName);
+
+            return response($fileData['content'], 200)
+                ->header('Content-Type', $fileData['mime_type'])
+                ->header('Content-Disposition', 'inline; filename="' . basename($blobName) . '"');
+        } catch (\Throwable $e) {
+            Log::error('Error displaying report file', [
+                'report_id' => $id,
+                'user_id' => $request->user()?->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return ApiResponse::error('Medical report file not found or access denied.', Response::HTTP_NOT_FOUND);
+        }
+    }
+
     private function deleteAzureFile(string $url): void
     {
         try {

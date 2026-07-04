@@ -109,7 +109,30 @@ final class WebhookController extends Controller
                 'importance' => 1,
             ]);
 
-            // 5. Broadcast complete event
+            // 5. Send push and in-app notifications
+            try {
+                $user = $report->profile->user;
+                if ($user) {
+                    $notificationService = app(\App\Services\NotificationService::class);
+                    $notificationService->send(
+                        $user,
+                        'report_processed',
+                        'Medical Report Processed',
+                        "Your medical report '" . $report->title . "' has been successfully analyzed by AI.",
+                        [
+                            'report_id' => $report->id,
+                            'status' => 'completed',
+                        ]
+                    );
+                }
+            } catch (\Throwable $ne) {
+                Log::warning('Failed to send notification on report complete', [
+                    'report_id' => $report->id,
+                    'error' => $ne->getMessage()
+                ]);
+            }
+
+            // 6. Broadcast complete event
             Log::info('Broadcasting ReportProcessingCompleted event', ['report_id' => $report->id]);
             event(new ReportProcessingCompleted($report->load(['knowledge', 'entities'])));
         });

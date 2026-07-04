@@ -176,4 +176,71 @@ class AzureBlobService
             return false;
         }
     }
+
+    /**
+     * Download / Fetch file content from Azure Blob Storage.
+     *
+     * @param string $blobName
+     * @return array{content: string, mime_type: string}
+     * @throws \Exception
+     */
+    public function getFile(string $blobName): array
+    {
+        try {
+            $gmtDate = gmdate('D, d M Y H:i:s \G\M\T');
+
+            $canonicalizedHeaders = "x-ms-date:" . $gmtDate . "\n" .
+                                    "x-ms-version:2021-08-06";
+
+            $canonicalizedResource = "/" . $this->accountName . "/" . $this->containerName . "/" . $blobName;
+
+            $stringToSign = "GET\n" .               // VERB
+                            "\n" .                  // Content-Encoding
+                            "\n" .                  // Content-Language
+                            "\n" .                  // Content-Length
+                            "\n" .                  // Content-MD5
+                            "\n" .                  // Content-Type
+                            "\n" .                  // Date
+                            "\n" .                  // If-Modified-Since
+                            "\n" .                  // If-Unmodified-Since
+                            "\n" .                  // If-Match
+                            "\n" .                  // If-None-Match
+                            "\n" .                  // Range
+                            $canonicalizedHeaders . "\n" .
+                            $canonicalizedResource;
+
+            $decodedKey = base64_decode($this->accountKey);
+            $signature = base64_encode(hash_hmac('sha256', $stringToSign, $decodedKey, true));
+
+            $url = "https://{$this->accountName}.blob.core.windows.net/{$this->containerName}/{$blobName}";
+
+            $response = Http::withHeaders([
+                'Authorization' => "SharedKey {$this->accountName}:{$signature}",
+                'x-ms-date' => $gmtDate,
+                'x-ms-version' => '2021-08-06',
+            ])->get($url);
+
+            if ($response->successful()) {
+                return [
+                    'content' => $response->body(),
+                    'mime_type' => $response->header('Content-Type') ?: 'application/octet-stream',
+                ];
+            }
+
+            Log::error('Azure Blob Get File Failed', [
+                'status' => $response->status(),
+                'response' => $response->body(),
+                'blob' => $blobName,
+            ]);
+
+            throw new \Exception('Failed to get file from Azure storage: ' . $response->body());
+        } catch (\Throwable $e) {
+            Log::error('Azure Blob Service Exception during getFile', [
+                'error' => $e->getMessage(),
+                'blob' => $blobName,
+            ]);
+
+            throw new \Exception('Failed to get file from Azure storage: ' . $e->getMessage());
+        }
+    }
 }
