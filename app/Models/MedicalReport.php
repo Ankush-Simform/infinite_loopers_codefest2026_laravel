@@ -15,7 +15,7 @@ class MedicalReport extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
-        'profile_id',
+        'report_profile_id',
         'report_category_id',
         'title',
         'report_type',
@@ -41,9 +41,9 @@ class MedicalReport extends Model
     |--------------------------------------------------------------------------
     */
 
-    public function profile(): BelongsTo
+    public function reportProfile(): BelongsTo
     {
-        return $this->belongsTo(Profile::class);
+        return $this->belongsTo(ReportProfile::class, 'report_profile_id');
     }
 
     public function category(): BelongsTo

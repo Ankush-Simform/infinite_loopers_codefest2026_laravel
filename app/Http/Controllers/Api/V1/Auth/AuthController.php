@@ -12,7 +12,7 @@ use App\Http\Requests\Api\V1\Auth\RegisterRequest;
 use App\Http\Resources\Api\V1\UserResource;
 use App\Models\User;
 use App\Notifications\Auth\VerifyEmailWithJwt;
-use App\Services\CloudinaryService;
+use App\Services\AzureBlobService;
 use App\Services\JwtService;
 use App\Support\ApiResponse;
 use Illuminate\Auth\Events\Verified;
@@ -28,7 +28,7 @@ final class AuthController extends Controller
 {
     public function __construct(
         protected JwtService $jwtService,
-        protected CloudinaryService $cloudinaryService
+        protected AzureBlobService $azureBlobService
     ) {}
 
     public function register(RegisterRequest $request): JsonResponse
@@ -205,21 +205,20 @@ final class AuthController extends Controller
 
             if ($request->hasFile('avatar')) {
                 if ($user->avatar) {
-                    $this->deleteCloudinaryFile($user->avatar);
+                    $this->deleteAzureFile($user->avatar);
                 }
-                $uploaded = $this->cloudinaryService->uploadFile($request->file('avatar'), 'avatars');
+                $uploaded = $this->azureBlobService->uploadFile($request->file('avatar'), 'avatars');
                 $userData['avatar'] = $uploaded['url'];
             }
 
             $user->update($userData);
 
             // Sync with "self" profile
-            $user->profiles()->updateOrCreate(
+            $user->reportProfiles()->updateOrCreate(
                 ['relation' => ProfileRelation::SELF->value],
                 array_filter([
                     'name' => $user->name,
                     'email' => $user->email,
-                    'profile_photo_path' => $user->avatar,
                 ], static fn ($value) => $value !== null)
             );
 
@@ -426,38 +425,29 @@ final class AuthController extends Controller
 
     private function ensureSelfProfileExists(User $user): void
     {
-        $user->profiles()->firstOrCreate(
+        $user->reportProfiles()->firstOrCreate(
             ['relation' => ProfileRelation::SELF->value],
             [
                 'name' => $user->name,
                 'email' => $user->email,
-                'profile_photo_path' => $user->avatar,
             ]
         );
     }
 
-    private function deleteCloudinaryFile(string $url): void
+    private function deleteAzureFile(string $url): void
     {
         try {
             $parsed = parse_url($url, PHP_URL_PATH);
             if ($parsed) {
-                $segments = explode('/', trim($parsed, '/'));
-                $uploadIndex = array_search('upload', $segments);
-                if ($uploadIndex !== false && isset($segments[$uploadIndex + 1])) {
-                    $publicIdSegments = array_slice($segments, $uploadIndex + 1);
-                    if (preg_match('/^v\d+$/', $publicIdSegments[0])) {
-                        array_shift($publicIdSegments);
-                    }
-                    $last = array_pop($publicIdSegments);
-                    $filename = pathinfo($last, PATHINFO_FILENAME);
-                    $publicIdSegments[] = $filename;
-                    $publicId = implode('/', $publicIdSegments);
-
-                    $this->cloudinaryService->deleteFile($publicId);
+                $parts = explode('/', trim($parsed, '/'));
+                if (count($parts) > 1) {
+                    array_shift($parts); // Remove container name
+                    $blobName = implode('/', $parts);
+                    $this->azureBlobService->deleteFile($blobName);
                 }
             }
         } catch (\Throwable $e) {
-            Log::warning('Failed to delete old cloudinary file', ['url' => $url, 'error' => $e->getMessage()]);
+            Log::warning('Failed to delete old Azure file', ['url' => $url, 'error' => $e->getMessage()]);
         }
     }
 }

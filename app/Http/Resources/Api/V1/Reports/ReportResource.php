@@ -12,7 +12,7 @@ final class ReportResource extends JsonResource
     {
         return [
             'id' => $this->id,
-            'profile_id' => $this->profile_id,
+            'report_profile_id' => $this->report_profile_id,
             'category' => $this->category ? [
                 'id' => $this->category->id,
                 'name' => $this->category->name,

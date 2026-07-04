@@ -4,8 +4,12 @@ namespace App\Enums;
 
 enum ProfileRelation: string
 {
-    // SELF , FAMILY, OTHER
     case SELF = 'self';
-    case FAMILY = 'family';
+    case WIFE = 'wife';
+    case SON = 'son';
+    case DAUGHTER = 'daughter';
+    case FATHER = 'father';
+    case MOTHER = 'mother';
     case OTHER = 'other';
+    case FAMILY = 'family';
 }

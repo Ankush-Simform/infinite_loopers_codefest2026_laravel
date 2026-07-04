@@ -27,7 +27,7 @@ class ProcessMedicalReportJob implements ShouldQueue
     public function __construct(
         public readonly int $reportId,
         public readonly string $azureFileUrl,
-        public readonly int $profileId,
+        public readonly int $reportProfileId,
         public readonly int $userId
     ) {}
 

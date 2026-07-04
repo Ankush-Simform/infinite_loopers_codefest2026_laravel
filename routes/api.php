@@ -1,7 +1,8 @@
 <?php
 
 use App\Http\Controllers\Api\V1\Auth\AuthController;
-use App\Http\Controllers\Api\V1\Profile\ProfileController;
+use App\Http\Controllers\Api\V1\User\UserController;
+use App\Http\Controllers\Api\V1\Profile\ReportProfileController;
 use App\Http\Controllers\Api\V1\Reports\ReportController;
 use App\Http\Controllers\Api\V1\Reports\ReportCategoryController;
 use App\Http\Controllers\Api\V1\Reports\ReportUploadController;
@@ -49,11 +50,16 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // Home Dashboard API
         Route::get('home', HomeController::class)->name('home');
 
-        // Profile API (Plural profiles resources + singular fallback showSelf)
-        Route::get('profile', [ProfileController::class, 'showSelf'])->name('profile.show');
-        Route::put('profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
-        Route::get('profiles/enums', [ProfileController::class, 'getEnums'])->name('profiles.enums');
-        Route::apiResource('profiles', ProfileController::class);
+        // User Profile API
+        Route::get('user', [UserController::class, 'show'])->name('user.show');
+        Route::patch('user', [UserController::class, 'update'])->name('user.update');
+        Route::post('user', [UserController::class, 'update'])->name('user.post_update');
+        Route::put('user/password', [UserController::class, 'updatePassword'])->name('user.password.update');
+        Route::put('profile/password', [UserController::class, 'updatePassword'])->name('profile.password.update');
+
+        // Report Profiles API
+        Route::get('report-profiles/enums', [ReportProfileController::class, 'getEnums'])->name('report-profiles.enums');
+        Route::apiResource('report-profiles', ReportProfileController::class);
 
         // Reports API
         Route::get('categories', ReportCategoryController::class)->name('categories.index');

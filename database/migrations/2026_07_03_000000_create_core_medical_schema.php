@@ -11,20 +11,18 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // 1. Profiles
-        Schema::create('profiles', function (Blueprint $table) {
+        // 1. Report Profiles
+        Schema::create('report_profiles', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
-            $table->string('name')->nullable();
+            $table->string('relation');
+            $table->string('name');
             $table->string('email')->nullable();
-            $table->string('relation')->nullable();
             $table->string('blood_group', 5)->nullable();
             $table->date('date_of_birth')->nullable();
             $table->string('gender')->nullable();
             $table->decimal('height_cm', 5, 2)->nullable();
             $table->decimal('weight_kg', 5, 2)->nullable();
-            $table->string('tags')->nullable();
-            $table->string('profile_photo_path')->nullable();
             $table->timestamps();
             $table->softDeletes();
         });
@@ -42,7 +40,7 @@ return new class extends Migration
         // 3. Medical Reports
         Schema::create('medical_reports', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('profile_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('report_profile_id')->constrained('report_profiles')->cascadeOnDelete();
             $table->foreignId('report_category_id')
                 ->nullable()
                 ->constrained()
@@ -99,7 +97,7 @@ return new class extends Migration
         // 6. Timeline Events
         Schema::create('timeline_events', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('profile_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('report_profile_id')->constrained('report_profiles')->cascadeOnDelete();
             $table->foreignId('report_id')
                 ->nullable()
                 ->constrained('medical_reports')
@@ -129,9 +127,9 @@ return new class extends Migration
         // 8. Emergency Cards
         Schema::create('emergency_cards', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('profile_id')
+            $table->foreignId('user_id')
                 ->unique()
-                ->constrained()
+                ->constrained('users')
                 ->cascadeOnDelete();
 
             $table->string('qr_token')->unique();
@@ -221,6 +219,6 @@ return new class extends Migration
         Schema::dropIfExists('medical_knowledge');
         Schema::dropIfExists('medical_reports');
         Schema::dropIfExists('report_categories');
-        Schema::dropIfExists('profiles');
+        Schema::dropIfExists('report_profiles');
     }
 };

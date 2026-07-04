@@ -101,7 +101,7 @@ final class WebhookController extends Controller
 
             // 4. Create timeline event
             $report->timelineEvents()->create([
-                'profile_id' => $report->profile_id,
+                'report_profile_id' => $report->report_profile_id,
                 'event_type' => 'report_upload',
                 'title' => 'Report Processed: ' . $report->title,
                 'description' => 'Medical report ' . $report->title . ' was successfully analyzed by AI.',
@@ -111,7 +111,7 @@ final class WebhookController extends Controller
 
             // 5. Send push and in-app notifications
             try {
-                $user = $report->profile->user;
+                $user = $report->reportProfile->user;
                 if ($user) {
                     $notificationService = app(\App\Services\NotificationService::class);
                     $notificationService->send(

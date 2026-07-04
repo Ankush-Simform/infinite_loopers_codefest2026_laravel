@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Models\User;
-use App\Models\Profile;
+use App\Models\ReportProfile;
 use App\Models\MedicalReport;
 use App\Models\ReportCategory;
 use App\Models\TimelineEvent;
@@ -27,7 +27,7 @@ class AmrvApiTest extends TestCase
     use RefreshDatabase;
 
     protected User $user;
-    protected Profile $profile;
+    protected ReportProfile $profile;
     protected ReportCategory $category;
 
     protected function setUp(): void
@@ -51,7 +51,7 @@ class AmrvApiTest extends TestCase
         $this->user->markEmailAsVerified();
 
         // Create user profile
-        $this->profile = $this->user->profiles()->create([
+        $this->profile = $this->user->reportProfiles()->create([
             'name' => 'John Doe',
             'email' => 'johndoe@example.com',
             'relation' => ProfileRelation::SELF->value,
@@ -126,13 +126,13 @@ class AmrvApiTest extends TestCase
 
         // 1. List profiles
         $listResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-            ->getJson('/api/v1/profiles');
+            ->getJson('/api/v1/report-profiles');
         $listResponse->assertOk()
             ->assertJsonCount(1, 'data');
 
         // 2. Create family profile
         $createResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-            ->postJson('/api/v1/profiles', [
+            ->postJson('/api/v1/report-profiles', [
                 'name' => 'Spouse Doe',
                 'relation' => 'family',
                 'email' => 'spouse@example.com',
@@ -142,13 +142,13 @@ class AmrvApiTest extends TestCase
 
         // 3. Get profile details
         $showResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-            ->getJson('/api/v1/profiles/' . $spouseProfileId);
+            ->getJson('/api/v1/report-profiles/' . $spouseProfileId);
         $showResponse->assertOk()
             ->assertJsonPath('data.name', 'Spouse Doe');
 
         // 4. Update profile details
         $updateResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-            ->postJson('/api/v1/profiles/' . $spouseProfileId, [
+            ->postJson('/api/v1/report-profiles/' . $spouseProfileId, [
                 '_method' => 'PUT',
                 'name' => 'Spouse Doe Updated',
             ]);
@@ -157,7 +157,7 @@ class AmrvApiTest extends TestCase
 
         // 5. Delete profile
         $deleteResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-            ->deleteJson('/api/v1/profiles/' . $spouseProfileId);
+            ->deleteJson('/api/v1/report-profiles/' . $spouseProfileId);
         $deleteResponse->assertOk();
     }
 
@@ -221,7 +221,7 @@ class AmrvApiTest extends TestCase
         // 1. Stage 1: Upload File
         $uploadResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
             ->postJson('/api/v1/reports/upload', [
-                'profile_id' => $this->profile->id,
+                'report_profile_id' => $this->profile->id,
                 'file' => $file,
             ]);
 
@@ -244,7 +244,7 @@ class AmrvApiTest extends TestCase
         // 4. Stage 4: Save report
         $saveResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
             ->postJson('/api/v1/reports/upload/' . $uploadId . '/save', [
-                'profile_id' => $this->profile->id,
+                'report_profile_id' => $this->profile->id,
                 'report' => [
                     'title' => 'My Reviewed Staged Blood Report',
                     'report_type' => 'pdf',
@@ -285,7 +285,7 @@ class AmrvApiTest extends TestCase
         // 1. Create Event
         $response = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
             ->postJson('/api/v1/timelines', [
-                'profile_id' => $this->profile->id,
+                'report_profile_id' => $this->profile->id,
                 'event_type' => 'checkup',
                 'title' => 'Annual Health Checkup',
                 'description' => 'General physical checkup',
@@ -365,7 +365,7 @@ class AmrvApiTest extends TestCase
             'password' => 'password',
         ])->assertOk();
 
-        $this->assertDatabaseHas('profiles', [
+        $this->assertDatabaseHas('report_profiles', [
             'user_id' => $user->id,
             'name' => 'Original Name',
             'email' => 'original@example.com',
@@ -374,7 +374,7 @@ class AmrvApiTest extends TestCase
 
         // 2. Test GET profiles/enums
         $enumsResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-            ->getJson('/api/v1/profiles/enums');
+            ->getJson('/api/v1/report-profiles/enums');
 
         $enumsResponse->assertOk()
             ->assertJsonPath('success', true)
@@ -406,7 +406,7 @@ class AmrvApiTest extends TestCase
         ]);
 
         // Assert Profile model is synced
-        $this->assertDatabaseHas('profiles', [
+        $this->assertDatabaseHas('report_profiles', [
             'user_id' => $user->id,
             'name' => 'Updated Name',
             'relation' => \App\Enums\ProfileRelation::SELF->value,

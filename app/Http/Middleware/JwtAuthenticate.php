@@ -50,4 +50,5 @@ final class JwtAuthenticate
 
         return $next($request);
     }
+    
 }

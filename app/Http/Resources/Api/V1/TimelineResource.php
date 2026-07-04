@@ -12,7 +12,7 @@ final class TimelineResource extends JsonResource
     {
         return [
             'id' => $this->id,
-            'profile_id' => $this->profile_id,
+            'report_profile_id' => $this->report_profile_id,
             'report_id' => $this->report_id,
             'event_type' => $this->event_type,
             'title' => $this->title,

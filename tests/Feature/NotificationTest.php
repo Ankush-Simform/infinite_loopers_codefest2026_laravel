@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Models\User;
-use App\Models\Profile;
+use App\Models\ReportProfile;
 use App\Models\UserDevice;
 use App\Models\Notification;
 use App\Models\MedicalReport;
@@ -29,7 +29,7 @@ class NotificationTest extends TestCase
 
     protected User $user;
     protected string $token;
-    protected Profile $profile;
+    protected ReportProfile $profile;
 
     protected function setUp(): void
     {
@@ -43,7 +43,7 @@ class NotificationTest extends TestCase
             'email_verified_at' => now(),
         ]);
 
-        $this->profile = $this->user->profiles()->create([
+        $this->profile = $this->user->reportProfiles()->create([
             'name' => 'John Doe',
             'relation' => 'self',
         ]);
@@ -223,7 +223,7 @@ class NotificationTest extends TestCase
         $uploadId = 'test-staged-upload-uuid';
         $stagedData = [
             'created_at' => now()->timestamp,
-            'profile_id' => $this->profile->id,
+            'report_profile_id' => $this->profile->id,
             'file_url' => 'https://amrvblobstorage.blob.core.windows.net/amrv-container/staging/sample.pdf',
             'file_hash' => 'dummy_hash',
             'report_type' => 'pdf',
@@ -248,7 +248,7 @@ class NotificationTest extends TestCase
 
         $response = $this->withHeaders(['Authorization' => 'Bearer ' . $this->token])
             ->postJson("/api/v1/reports/upload/{$uploadId}/save", [
-                'profile_id' => $this->profile->id,
+                'report_profile_id' => $this->profile->id,
                 'report' => $stagedData['report'],
                 'entities' => [],
                 'tags' => [],
@@ -302,7 +302,7 @@ class NotificationTest extends TestCase
         // 1. Trigger POST /v1/reports
         $response = $this->withHeaders(['Authorization' => 'Bearer ' . $this->token])
             ->postJson('/api/v1/reports', [
-                'profile_id' => $this->profile->id,
+                'report_profile_id' => $this->profile->id,
                 'title' => 'Monthly Checkup Report',
                 'file' => $file,
             ]);
@@ -406,7 +406,7 @@ class NotificationTest extends TestCase
         ]);
 
         $report = MedicalReport::create([
-            'profile_id' => $this->profile->id,
+            'report_profile_id' => $this->profile->id,
             'report_category_id' => $category->id,
             'title' => 'Secure Blood Report',
             'report_type' => 'pdf',
@@ -446,7 +446,7 @@ class NotificationTest extends TestCase
         ]);
 
         $report = MedicalReport::create([
-            'profile_id' => $this->profile->id,
+            'report_profile_id' => $this->profile->id,
             'report_category_id' => $category->id,
             'title' => 'Query Token Blood Report',
             'report_type' => 'pdf',

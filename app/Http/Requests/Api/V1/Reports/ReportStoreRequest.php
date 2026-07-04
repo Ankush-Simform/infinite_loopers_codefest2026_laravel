@@ -12,9 +12,9 @@ final class ReportStoreRequest extends ApiFormRequest
     public function rules(): array
     {
         return [
-            'profile_id' => [
+            'report_profile_id' => [
                 'required',
-                Rule::exists('profiles', 'id')->where(function ($query): void {
+                Rule::exists('report_profiles', 'id')->where(function ($query): void {
                     $query->where('user_id', $this->user()?->id);
                 }),
             ],

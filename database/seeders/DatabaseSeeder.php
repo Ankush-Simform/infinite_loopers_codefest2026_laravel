@@ -30,7 +30,7 @@ class DatabaseSeeder extends Seeder
 
         $this->call([
             ReportCategorySeeder::class,
-            ProfileSeeder::class,
+            ReportProfileSeeder::class,
             MedicalReportSeeder::class,
             MedicalKnowledgeSeeder::class,
             MedicalEntitySeeder::class,

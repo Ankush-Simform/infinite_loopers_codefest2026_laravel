@@ -36,7 +36,12 @@ final class ReportUploadController extends Controller
     {
         try {
             $request->validate([
-                'profile_id' => 'required|exists:profiles,id',
+                'report_profile_id' => [
+                    'required',
+                    \Illuminate\Validation\Rule::exists('report_profiles', 'id')->where(function ($query) use ($request): void {
+                        $query->where('user_id', $request->user()?->id);
+                    }),
+                ],
                 'file' => 'required|file|mimes:pdf,jpg,jpeg,png|max:10240', // Max 10MB
             ]);
 
@@ -44,13 +49,13 @@ final class ReportUploadController extends Controller
             $fileHash = hash_file('sha256', $file->getRealPath());
 
             // Check duplicate in database
-            $duplicate = MedicalReport::where('profile_id', $request->profile_id)
+            $duplicate = MedicalReport::where('report_profile_id', $request->report_profile_id)
                 ->where('file_hash', $fileHash)
                 ->first();
 
             if ($duplicate) {
                 Log::warning('Duplicate file upload attempted during staging', [
-                    'profile_id' => $request->profile_id,
+                    'report_profile_id' => $request->report_profile_id,
                     'file_hash' => $fileHash,
                 ]);
                 return ApiResponse::error('This file has already been uploaded for this profile.', Response::HTTP_CONFLICT);
@@ -64,7 +69,7 @@ final class ReportUploadController extends Controller
             // Structure mock AI response results (normally fetched via OCR/AI services)
             $stagedData = [
                 'created_at' => now()->timestamp,
-                'profile_id' => (int) $request->profile_id,
+                'report_profile_id' => (int) $request->report_profile_id,
                 'file_url' => $uploaded['url'],
                 'file_hash' => $fileHash,
                 'report_type' => $uploaded['format'],
@@ -122,7 +127,7 @@ final class ReportUploadController extends Controller
 
             Log::info('Staged medical report uploaded successfully', [
                 'upload_id' => $uploadId,
-                'profile_id' => $request->profile_id,
+                'report_profile_id' => $request->report_profile_id,
             ]);
 
             return response()->json([
@@ -216,7 +221,12 @@ final class ReportUploadController extends Controller
 
             // Validate requested edits
             $request->validate([
-                'profile_id' => 'required|exists:profiles,id',
+                'report_profile_id' => [
+                    'required',
+                    \Illuminate\Validation\Rule::exists('report_profiles', 'id')->where(function ($query) use ($request): void {
+                        $query->where('user_id', $request->user()?->id);
+                    }),
+                ],
                 'report' => 'required|array',
                 'report.title' => 'required|string|max:255',
                 'report.report_type' => 'required|string|max:50',
@@ -231,7 +241,7 @@ final class ReportUploadController extends Controller
             $reportId = DB::transaction(function () use ($request, $data): int {
                 // 1. Create Report
                 $report = MedicalReport::create([
-                    'profile_id' => $request->profile_id,
+                    'report_profile_id' => $request->report_profile_id,
                     'report_category_id' => $data['report']['report_category_id'] ?? null,
                     'title' => $request->input('report.title'),
                     'report_type' => $request->input('report.report_type'),
@@ -280,7 +290,7 @@ final class ReportUploadController extends Controller
 
                 // 5. Create timeline event
                 $report->timelineEvents()->create([
-                    'profile_id' => $report->profile_id,
+                    'report_profile_id' => $report->report_profile_id,
                     'event_type' => 'report_upload',
                     'title' => 'Report Uploaded: ' . $report->title,
                     'description' => 'Medical report ' . $report->title . ' was successfully saved and reviewed.',

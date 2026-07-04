@@ -32,8 +32,8 @@ final class ReportController extends Controller
             $user = $request->user();
             $query = $user->medicalReports()->with('category');
 
-            if ($request->filled('profile_id')) {
-                $query->where('profile_id', $request->query('profile_id'));
+            if ($request->filled('report_profile_id')) {
+                $query->where('report_profile_id', $request->query('report_profile_id'));
             }
 
             if ($request->filled('category_id')) {
@@ -62,7 +62,7 @@ final class ReportController extends Controller
             Log::info('Medical reports listed successfully with filters', [
                 'user_id' => $user->id,
                 'count' => $reports->count(),
-                'filters' => $request->only(['profile_id', 'category_id', 'report_type', 'status', 'search']),
+                'filters' => $request->only(['report_profile_id', 'category_id', 'report_type', 'status', 'search']),
             ]);
 
             return ApiResponse::paginated($reports, 'Medical reports retrieved.');
@@ -83,13 +83,13 @@ final class ReportController extends Controller
             $fileHash = hash_file('sha256', $file->getRealPath());
 
             // Check if this file has already been uploaded for this profile to prevent duplicates
-            $duplicate = MedicalReport::where('profile_id', $request->profile_id)
+            $duplicate = MedicalReport::where('report_profile_id', $request->report_profile_id)
                 ->where('file_hash', $fileHash)
                 ->first();
 
             if ($duplicate) {
                 Log::warning('Duplicate report upload attempted', [
-                    'profile_id' => $request->profile_id,
+                    'report_profile_id' => $request->report_profile_id,
                     'file_hash' => $fileHash,
                 ]);
                 return ApiResponse::error('This file has already been uploaded for this profile.', Response::HTTP_CONFLICT);
@@ -99,7 +99,7 @@ final class ReportController extends Controller
 
             $report = DB::transaction(function () use ($request, $uploadedFile, $fileHash) {
                 $report = MedicalReport::create([
-                    'profile_id' => $request->profile_id,
+                    'report_profile_id' => $request->report_profile_id,
                     'report_category_id' => $request->report_category_id,
                     'title' => $request->title,
                     'report_type' => $uploadedFile['format'],
@@ -113,7 +113,7 @@ final class ReportController extends Controller
 
                 // Create a TimelineEvent for this report upload
                 $report->timelineEvents()->create([
-                    'profile_id' => $report->profile_id,
+                    'report_profile_id' => $report->report_profile_id,
                     'event_type' => 'report_upload',
                     'title' => 'Report Uploaded: ' . $report->title,
                     'description' => 'Medical report ' . $report->title . ' was successfully uploaded.',
@@ -133,7 +133,7 @@ final class ReportController extends Controller
             ProcessMedicalReportJob::dispatch(
                 $report->id,
                 $report->file_url,
-                (int) $report->profile_id,
+                (int) $report->report_profile_id,
                 (int) $request->user()->id
             );
 
@@ -181,7 +181,7 @@ final class ReportController extends Controller
             DB::transaction(function () use ($request, $report): void {
                 $updateData = array_filter(
                     $request->only([
-                        'profile_id',
+                        'report_profile_id',
                         'report_category_id',
                         'title',
                         'doctor_name',

@@ -12,7 +12,7 @@ class TimelineEvent extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
-        'profile_id',
+        'report_profile_id',
         'report_id',
         'event_type',
         'title',
@@ -35,9 +35,9 @@ class TimelineEvent extends Model
     |--------------------------------------------------------------------------
     */
 
-    public function profile(): BelongsTo
+    public function reportProfile(): BelongsTo
     {
-        return $this->belongsTo(Profile::class);
+        return $this->belongsTo(ReportProfile::class, 'report_profile_id');
     }
 
     public function report(): BelongsTo

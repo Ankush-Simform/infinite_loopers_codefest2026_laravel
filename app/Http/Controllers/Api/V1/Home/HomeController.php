@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api\V1\Home;
 
 use App\Http\Controllers\Controller;
-use App\Http\Resources\Api\V1\ProfileResource;
+use App\Http\Resources\Api\V1\ReportProfileResource;
 use App\Http\Resources\Api\V1\Reports\ReportResource;
 use App\Http\Resources\Api\V1\TimelineResource;
 use App\Http\Resources\Api\V1\Chat\ChatSessionResource;
@@ -21,20 +21,20 @@ final class HomeController extends Controller
         try {
             $user = $request->user();
             // Get the primary profile (or first one)
-            $profile = $user->profile ?? $user->profiles()->first();
+            $reportProfile = $user->reportProfiles()->where('relation', 'self')->first() ?? $user->reportProfiles()->first();
 
             $data = [
-                'profile' => $profile ? ProfileResource::make($profile) : null,
+                'profile' => $reportProfile ? new ReportProfileResource($reportProfile) : null,
                 'stats' => [
-                    'total_reports' => $profile ? $profile->medicalReports()->count() : 0,
-                    'latest_report_date' => $profile ? $profile->medicalReports()->latest('report_date')->value('report_date')?->toDateString() : null,
+                    'total_reports' => $reportProfile ? $reportProfile->medicalReports()->count() : 0,
+                    'latest_report_date' => $reportProfile ? $reportProfile->medicalReports()->latest('report_date')->value('report_date')?->toDateString() : null,
                     'total_chats' => $user->chatSessions()->count(),
                 ],
-                'latest_reports' => $profile 
-                    ? ReportResource::collection($profile->medicalReports()->with('category')->latest('report_date')->limit(3)->get()) 
+                'latest_reports' => $reportProfile 
+                    ? ReportResource::collection($reportProfile->medicalReports()->with('category')->latest('report_date')->limit(3)->get()) 
                     : [],
-                'latest_timeline' => $profile 
-                    ? TimelineResource::collection($profile->timelineEvents()->latest('event_date')->latest('id')->limit(3)->get()) 
+                'latest_timeline' => $reportProfile 
+                    ? TimelineResource::collection($reportProfile->timelineEvents()->latest('event_date')->latest('id')->limit(3)->get()) 
                     : [],
                 'recent_chat' => ($recentChatSession = $user->chatSessions()->latest('last_message_at')->first())
                     ? ChatSessionResource::make($recentChatSession)
@@ -43,7 +43,7 @@ final class HomeController extends Controller
 
             Log::info('Home dashboard retrieved successfully', [
                 'user_id' => $user->id,
-                'profile_id' => $profile?->id,
+                'report_profile_id' => $reportProfile?->id,
             ]);
 
             return ApiResponse::success($data, 'Home dashboard retrieved.');
