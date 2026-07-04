@@ -9,7 +9,7 @@ use App\Http\Requests\Api\V1\Profile\ProfileStoreRequest;
 use App\Http\Requests\Api\V1\Profile\ProfileUpdateRequest;
 use App\Http\Resources\Api\V1\ProfileResource;
 use App\Support\ApiResponse;
-use App\Services\CloudinaryService;
+use App\Services\AzureBlobService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -20,7 +20,7 @@ use Symfony\Component\HttpFoundation\Response;
 final class ProfileController extends Controller
 {
     public function __construct(
-        protected CloudinaryService $cloudinaryService
+        protected AzureBlobService $azureBlobService
     ) {}
 
     /**
@@ -194,7 +194,7 @@ final class ProfileController extends Controller
 
             DB::transaction(function () use ($profile): void {
                 if ($profile->profile_photo_path) {
-                    $this->deleteCloudinaryFile($profile->profile_photo_path);
+                    $this->deleteAzureFile($profile->profile_photo_path);
                 }
                 $profile->delete();
             });
@@ -286,36 +286,28 @@ final class ProfileController extends Controller
     private function saveProfilePhoto($profile, $file): void
     {
         if ($profile->profile_photo_path) {
-            $this->deleteCloudinaryFile($profile->profile_photo_path);
+            $this->deleteAzureFile($profile->profile_photo_path);
         }
 
-        $uploaded = $this->cloudinaryService->uploadFile($file, 'profiles');
+        $uploaded = $this->azureBlobService->uploadFile($file, 'profiles');
         $profile->profile_photo_path = $uploaded['url'];
         $profile->save();
     }
 
-    private function deleteCloudinaryFile(string $url): void
+    private function deleteAzureFile(string $url): void
     {
         try {
             $parsed = parse_url($url, PHP_URL_PATH);
             if ($parsed) {
-                $segments = explode('/', trim($parsed, '/'));
-                $uploadIndex = array_search('upload', $segments);
-                if ($uploadIndex !== false && isset($segments[$uploadIndex + 1])) {
-                    $publicIdSegments = array_slice($segments, $uploadIndex + 1);
-                    if (preg_match('/^v\d+$/', $publicIdSegments[0])) {
-                        array_shift($publicIdSegments);
-                    }
-                    $last = array_pop($publicIdSegments);
-                    $filename = pathinfo($last, PATHINFO_FILENAME);
-                    $publicIdSegments[] = $filename;
-                    $publicId = implode('/', $publicIdSegments);
-
-                    $this->cloudinaryService->deleteFile($publicId);
+                $parts = explode('/', trim($parsed, '/'));
+                if (count($parts) > 1) {
+                    array_shift($parts); // Remove container name
+                    $blobName = implode('/', $parts);
+                    $this->azureBlobService->deleteFile($blobName);
                 }
             }
         } catch (\Throwable $e) {
-            Log::warning('Failed to delete old cloudinary file', ['url' => $url, 'error' => $e->getMessage()]);
+            Log::warning('Failed to delete old Azure file', ['url' => $url, 'error' => $e->getMessage()]);
         }
     }
 }

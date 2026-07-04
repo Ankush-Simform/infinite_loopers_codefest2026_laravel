@@ -20,13 +20,19 @@ final class JwtAuthenticate
 
     public function handle(Request $request, Closure $next): Response
     {
+        $token = null;
         $authorization = $request->header('Authorization');
 
-        if (!$authorization || !str_starts_with($authorization, 'Bearer ')) {
+        if ($authorization && str_starts_with($authorization, 'Bearer ')) {
+            $token = substr($authorization, 7);
+        } elseif ($request->has('token')) {
+            $token = $request->query('token');
+        }
+
+        if (!$token) {
             return ApiResponse::error('Unauthenticated.', Response::HTTP_UNAUTHORIZED);
         }
 
-        $token = substr($authorization, 7);
         $payload = $this->jwtService->validateToken($token);
 
         if (!$payload || !isset($payload['sub'])) {

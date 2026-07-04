@@ -185,11 +185,11 @@ class AmrvApiTest extends TestCase
         $token = app(\App\Services\JwtService::class)->generateToken($this->user);
         Storage::fake('public');
 
-        $this->mock(\App\Services\CloudinaryService::class, function ($mock) {
+        $this->mock(\App\Services\AzureBlobService::class, function ($mock) {
             $mock->shouldReceive('uploadFile')
                 ->andReturn([
-                    'url' => 'https://res.cloudinary.com/demo/image/upload/v1570975200/sample.pdf',
-                    'public_id' => 'sample_id',
+                    'url' => 'https://amrvblobstorage.blob.core.windows.net/amrv-container/staging/sample.pdf',
+                    'public_id' => 'staging/sample.pdf',
                     'format' => 'pdf',
                     'bytes' => 500000,
                 ]);
