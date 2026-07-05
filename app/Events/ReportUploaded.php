@@ -25,9 +25,10 @@ class ReportUploaded implements ShouldBroadcast
     public function broadcastOn(): array
     {
         $userId = $this->report->profile->user_id;
+
         return [
-            new PrivateChannel('reports.' . $userId),
-            new PrivateChannel('user.' . $userId),
+            new PrivateChannel('reports.'.$userId),
+            new PrivateChannel('user.'.$userId),
         ];
     }
 

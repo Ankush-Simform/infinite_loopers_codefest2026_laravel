@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use GuzzleHttp\Client;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -11,7 +12,9 @@ use Illuminate\Support\Facades\Log;
 class AzureBlobService
 {
     protected string $accountName;
+
     protected string $containerName;
+
     protected string $accountKey;
 
     public function __construct()
@@ -24,17 +27,16 @@ class AzureBlobService
     /**
      * Upload a file to Azure Blob Storage.
      *
-     * @param UploadedFile $file
-     * @param string $folder
      * @return array{url: string, public_id: string, format: string, bytes: int}
+     *
      * @throws \Exception
      */
     public function uploadFile(UploadedFile $file, string $folder = 'amrv'): array
     {
         try {
             $extension = $file->getClientOriginalExtension();
-            $filename = uniqid('report_', true) . '.' . $extension;
-            $blobName = trim($folder, '/') . '/' . $filename;
+            $filename = uniqid('report_', true).'.'.$extension;
+            $blobName = trim($folder, '/').'/'.$filename;
 
             $fileContent = file_get_contents($file->getRealPath());
             $contentLength = (string) strlen($fileContent);
@@ -44,27 +46,27 @@ class AzureBlobService
             $gmtDate = gmdate('D, d M Y H:i:s \G\M\T');
 
             // Construct CanonicalizedHeaders (must be sorted alphabetically by header name)
-            $canonicalizedHeaders = "x-ms-blob-type:BlockBlob\n" .
-                                    "x-ms-date:" . $gmtDate . "\n" .
-                                    "x-ms-version:2021-08-06";
+            $canonicalizedHeaders = "x-ms-blob-type:BlockBlob\n".
+                                    'x-ms-date:'.$gmtDate."\n".
+                                    'x-ms-version:2021-08-06';
 
             // Construct CanonicalizedResource
-            $canonicalizedResource = "/" . $this->accountName . "/" . $this->containerName . "/" . $blobName;
+            $canonicalizedResource = '/'.$this->accountName.'/'.$this->containerName.'/'.$blobName;
 
             // Construct String to Sign
-            $stringToSign = "PUT\n" .               // VERB
-                            "\n" .                  // Content-Encoding
-                            "\n" .                  // Content-Language
-                            $contentLength . "\n" . // Content-Length
-                            "\n" .                  // Content-MD5
-                            $contentType . "\n" .   // Content-Type
-                            "\n" .                  // Date
-                            "\n" .                  // If-Modified-Since
-                            "\n" .                  // If-Unmodified-Since
-                            "\n" .                  // If-Match
-                            "\n" .                  // If-None-Match
-                            "\n" .                  // Range
-                            $canonicalizedHeaders . "\n" .
+            $stringToSign = "PUT\n".               // VERB
+                            "\n".                  // Content-Encoding
+                            "\n".                  // Content-Language
+                            $contentLength."\n". // Content-Length
+                            "\n".                  // Content-MD5
+                            $contentType."\n".   // Content-Type
+                            "\n".                  // Date
+                            "\n".                  // If-Modified-Since
+                            "\n".                  // If-Unmodified-Since
+                            "\n".                  // If-Match
+                            "\n".                  // If-None-Match
+                            "\n".                  // Range
+                            $canonicalizedHeaders."\n".
                             $canonicalizedResource;
 
             // Generate HMAC-SHA256 signature
@@ -102,46 +104,43 @@ class AzureBlobService
                 'blob' => $blobName,
             ]);
 
-            throw new \Exception('Failed to upload file to Azure storage: ' . $response->body());
+            throw new \Exception('Failed to upload file to Azure storage: '.$response->body());
         } catch (\Throwable $e) {
             Log::error('Azure Blob Service Exception during upload', [
                 'error' => $e->getMessage(),
                 'file_name' => $file->getClientOriginalName(),
             ]);
 
-            throw new \Exception('Failed to upload file to Azure storage: ' . $e->getMessage());
+            throw new \Exception('Failed to upload file to Azure storage: '.$e->getMessage());
         }
     }
 
     /**
      * Delete a file from Azure Blob Storage.
-     *
-     * @param string $blobName
-     * @return bool
      */
     public function deleteFile(string $blobName): bool
     {
         try {
             $gmtDate = gmdate('D, d M Y H:i:s \G\M\T');
 
-            $canonicalizedHeaders = "x-ms-date:" . $gmtDate . "\n" .
-                                    "x-ms-version:2021-08-06";
+            $canonicalizedHeaders = 'x-ms-date:'.$gmtDate."\n".
+                                    'x-ms-version:2021-08-06';
 
-            $canonicalizedResource = "/" . $this->accountName . "/" . $this->containerName . "/" . $blobName;
+            $canonicalizedResource = '/'.$this->accountName.'/'.$this->containerName.'/'.$blobName;
 
-            $stringToSign = "DELETE\n" .           // VERB
-                            "\n" .                  // Content-Encoding
-                            "\n" .                  // Content-Language
-                            "\n" .                  // Content-Length
-                            "\n" .                  // Content-MD5
-                            "\n" .                  // Content-Type
-                            "\n" .                  // Date
-                            "\n" .                  // If-Modified-Since
-                            "\n" .                  // If-Unmodified-Since
-                            "\n" .                  // If-Match
-                            "\n" .                  // If-None-Match
-                            "\n" .                  // Range
-                            $canonicalizedHeaders . "\n" .
+            $stringToSign = "DELETE\n".           // VERB
+                            "\n".                  // Content-Encoding
+                            "\n".                  // Content-Language
+                            "\n".                  // Content-Length
+                            "\n".                  // Content-MD5
+                            "\n".                  // Content-Type
+                            "\n".                  // Date
+                            "\n".                  // If-Modified-Since
+                            "\n".                  // If-Unmodified-Since
+                            "\n".                  // If-Match
+                            "\n".                  // If-None-Match
+                            "\n".                  // Range
+                            $canonicalizedHeaders."\n".
                             $canonicalizedResource;
 
             $decodedKey = base64_decode($this->accountKey);
@@ -159,6 +158,7 @@ class AzureBlobService
                 Log::info('Azure Blob Delete Successful', [
                     'blob' => $blobName,
                 ]);
+
                 return true;
             }
 
@@ -167,12 +167,14 @@ class AzureBlobService
                 'response' => $response->body(),
                 'blob' => $blobName,
             ]);
+
             return false;
         } catch (\Throwable $e) {
             Log::error('Azure Blob Service Exception during delete', [
                 'error' => $e->getMessage(),
                 'blob' => $blobName,
             ]);
+
             return false;
         }
     }
@@ -180,8 +182,8 @@ class AzureBlobService
     /**
      * Download / Fetch file content from Azure Blob Storage.
      *
-     * @param string $blobName
      * @return array{content: string, mime_type: string}
+     *
      * @throws \Exception
      */
     public function getFile(string $blobName): array
@@ -189,24 +191,24 @@ class AzureBlobService
         try {
             $gmtDate = gmdate('D, d M Y H:i:s \G\M\T');
 
-            $canonicalizedHeaders = "x-ms-date:" . $gmtDate . "\n" .
-                                    "x-ms-version:2021-08-06";
+            $canonicalizedHeaders = 'x-ms-date:'.$gmtDate."\n".
+                                    'x-ms-version:2021-08-06';
 
-            $canonicalizedResource = "/" . $this->accountName . "/" . $this->containerName . "/" . $blobName;
+            $canonicalizedResource = '/'.$this->accountName.'/'.$this->containerName.'/'.$blobName;
 
-            $stringToSign = "GET\n" .               // VERB
-                            "\n" .                  // Content-Encoding
-                            "\n" .                  // Content-Language
-                            "\n" .                  // Content-Length
-                            "\n" .                  // Content-MD5
-                            "\n" .                  // Content-Type
-                            "\n" .                  // Date
-                            "\n" .                  // If-Modified-Since
-                            "\n" .                  // If-Unmodified-Since
-                            "\n" .                  // If-Match
-                            "\n" .                  // If-None-Match
-                            "\n" .                  // Range
-                            $canonicalizedHeaders . "\n" .
+            $stringToSign = "GET\n".               // VERB
+                            "\n".                  // Content-Encoding
+                            "\n".                  // Content-Language
+                            "\n".                  // Content-Length
+                            "\n".                  // Content-MD5
+                            "\n".                  // Content-Type
+                            "\n".                  // Date
+                            "\n".                  // If-Modified-Since
+                            "\n".                  // If-Unmodified-Since
+                            "\n".                  // If-Match
+                            "\n".                  // If-None-Match
+                            "\n".                  // Range
+                            $canonicalizedHeaders."\n".
                             $canonicalizedResource;
 
             $decodedKey = base64_decode($this->accountKey);
@@ -233,14 +235,75 @@ class AzureBlobService
                 'blob' => $blobName,
             ]);
 
-            throw new \Exception('Failed to get file from Azure storage: ' . $response->body());
+            throw new \Exception('Failed to get file from Azure storage: '.$response->body());
         } catch (\Throwable $e) {
             Log::error('Azure Blob Service Exception during getFile', [
                 'error' => $e->getMessage(),
                 'blob' => $blobName,
             ]);
 
-            throw new \Exception('Failed to get file from Azure storage: ' . $e->getMessage());
+            throw new \Exception('Failed to get file from Azure storage: '.$e->getMessage());
+        }
+    }
+
+    /**
+     * Download and stream a file chunk-by-chunk from Azure Blob Storage.
+     *
+     * @throws \Exception
+     */
+    public function downloadStream(string $blobName, callable $callback): void
+    {
+        try {
+            $gmtDate = gmdate('D, d M Y H:i:s \G\M\T');
+
+            $canonicalizedHeaders = 'x-ms-date:'.$gmtDate."\n".
+                                    'x-ms-version:2021-08-06';
+
+            $canonicalizedResource = '/'.$this->accountName.'/'.$this->containerName.'/'.$blobName;
+
+            $stringToSign = "GET\n".               // VERB
+                            "\n".                  // Content-Encoding
+                            "\n".                  // Content-Language
+                            "\n".                  // Content-Length
+                            "\n".                  // Content-MD5
+                            "\n".                  // Content-Type
+                            "\n".                  // Date
+                            "\n".                  // If-Modified-Since
+                            "\n".                  // If-Unmodified-Since
+                            "\n".                  // If-Match
+                            "\n".                  // If-None-Match
+                            "\n".                  // Range
+                            $canonicalizedHeaders."\n".
+                            $canonicalizedResource;
+
+            $decodedKey = base64_decode($this->accountKey);
+            $signature = base64_encode(hash_hmac('sha256', $stringToSign, $decodedKey, true));
+
+            $url = "https://{$this->accountName}.blob.core.windows.net/{$this->containerName}/{$blobName}";
+
+            $guzzle = new Client;
+            $response = $guzzle->get($url, [
+                'headers' => [
+                    'Authorization' => "SharedKey {$this->accountName}:{$signature}",
+                    'x-ms-date' => $gmtDate,
+                    'x-ms-version' => '2021-08-06',
+                ],
+                'stream' => true,
+            ]);
+
+            $body = $response->getBody();
+            while (! $body->eof()) {
+                $chunk = $body->read(8192); // Read in 8KB chunks
+                if ($chunk !== '') {
+                    $callback($chunk);
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::error('Azure Blob Service Exception during downloadStream', [
+                'error' => $e->getMessage(),
+                'blob' => $blobName,
+            ]);
+            throw new \Exception('Failed to download stream from Azure storage: '.$e->getMessage());
         }
     }
 }

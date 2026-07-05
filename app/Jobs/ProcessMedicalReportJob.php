@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
-use App\Models\MedicalReport;
 use App\Enums\ReportStatus;
-use App\Events\OcrStarted;
-use App\Events\OcrCompleted;
 use App\Events\AiProcessing;
+use App\Events\OcrCompleted;
+use App\Events\OcrStarted;
+use App\Events\ReportProcessingFailed;
+use App\Http\Controllers\Api\V1\Reports\WebhookController;
+use App\Models\MedicalReport;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -38,8 +40,9 @@ class ProcessMedicalReportJob implements ShouldQueue
     {
         try {
             $report = MedicalReport::find($this->reportId);
-            if (!$report) {
+            if (! $report) {
                 Log::error('ProcessMedicalReportJob: Report not found.', ['report_id' => $this->reportId]);
+
                 return;
             }
 
@@ -81,7 +84,7 @@ class ProcessMedicalReportJob implements ShouldQueue
                         'unit' => 'mmHg',
                         'reference_range' => '90-120',
                         'status' => 'normal',
-                        'confidence' => 99.00
+                        'confidence' => 99.00,
                     ],
                     [
                         'entity_type' => 'vital',
@@ -90,7 +93,7 @@ class ProcessMedicalReportJob implements ShouldQueue
                         'unit' => 'mmHg',
                         'reference_range' => '60-80',
                         'status' => 'normal',
-                        'confidence' => 99.00
+                        'confidence' => 99.00,
                     ],
                     [
                         'entity_type' => 'lab_value',
@@ -99,38 +102,35 @@ class ProcessMedicalReportJob implements ShouldQueue
                         'unit' => 'g/dL',
                         'reference_range' => '13.8-17.2',
                         'status' => 'normal',
-                        'confidence' => 98.50
-                    ]
+                        'confidence' => 98.50,
+                    ],
                 ],
                 'risk_level' => 'Low',
                 'recommendations' => [
                     'Continue regular hydration.',
                     'Schedule follow-up check in 6 months.',
-                    'Keep moderate daily physical exercise.'
+                    'Keep moderate daily physical exercise.',
                 ],
                 'confidence_score' => 97.80,
             ];
 
             // 6. Send the webhook POST call to Laravel
-            $webhookUrl = url('/api/webhooks/report-processing-complete');
-            if (str_contains($webhookUrl, 'localhost') || !str_starts_with($webhookUrl, 'http')) {
-                $webhookUrl = 'http://127.0.0.1:8000/api/webhooks/report-processing-complete';
-            }
+            $webhookUrl = rtrim(config('app.url') ?: url('/'), '/').'/api/webhooks/report-processing-complete';
 
             Log::info('Dispatching webhook to Laravel endpoint', ['url' => $webhookUrl]);
 
             try {
                 $response = Http::timeout(5)->post($webhookUrl, $webhookPayload);
-                if (!$response->successful()) {
-                    throw new \Exception('Webhook server returned status: ' . $response->status());
+                if (! $response->successful()) {
+                    throw new \Exception('Webhook server returned status: '.$response->status());
                 }
             } catch (\Throwable $e) {
                 Log::warning('Asynchronous HTTP Webhook call failed, executing local fallback', [
-                    'error' => $e->getMessage()
+                    'error' => $e->getMessage(),
                 ]);
 
                 // Local fallback: execute the controller logic directly without network call (useful in tests)
-                $controller = app(\App\Http\Controllers\Api\V1\Reports\WebhookController::class);
+                $controller = app(WebhookController::class);
                 $controller->handlePayloadDirectly($webhookPayload);
             }
 
@@ -141,7 +141,7 @@ class ProcessMedicalReportJob implements ShouldQueue
             ]);
 
             // Broadcast failure
-            event(new \App\Events\ReportProcessingFailed($this->reportId, $this->userId, $e->getMessage()));
+            event(new ReportProcessingFailed($this->reportId, $this->userId, $e->getMessage()));
         }
     }
 }

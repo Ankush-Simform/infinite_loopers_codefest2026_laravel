@@ -25,8 +25,8 @@ class AiProcessing implements ShouldBroadcast
     public function broadcastOn(): array
     {
         return [
-            new PrivateChannel('reports.' . $this->userId),
-            new PrivateChannel('user.' . $this->userId),
+            new PrivateChannel('reports.'.$this->userId),
+            new PrivateChannel('user.'.$this->userId),
         ];
     }
 

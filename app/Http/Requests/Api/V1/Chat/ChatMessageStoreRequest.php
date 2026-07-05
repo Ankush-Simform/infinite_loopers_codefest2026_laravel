@@ -9,10 +9,19 @@ use Illuminate\Validation\Rule;
 
 final class ChatMessageStoreRequest extends ApiFormRequest
 {
+    protected function prepareForValidation(): void
+    {
+        if ($this->filled('report_id')) {
+            $this->merge([
+                'report_id' => (int) $this->input('report_id'),
+            ]);
+        }
+    }
+
     public function rules(): array
     {
         return [
-            'content' => ['required', 'string', 'max:65535'],
+            'content' => ['required_without:attachments', 'nullable', 'string', 'max:65535'],
             'report_id' => [
                 'nullable',
                 Rule::exists('medical_reports', 'id')->where(function ($query): void {
@@ -20,6 +29,8 @@ final class ChatMessageStoreRequest extends ApiFormRequest
                 }),
             ],
             'metadata' => ['nullable', 'array'],
+            'attachments' => ['nullable', 'array', 'max:2'],
+            'attachments.*' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
         ];
     }
 }

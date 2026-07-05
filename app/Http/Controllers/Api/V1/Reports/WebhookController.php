@@ -4,12 +4,13 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api\V1\Reports;
 
-use App\Http\Controllers\Controller;
-use App\Models\MedicalReport;
-use App\Models\MedicalKnowledge;
-use App\Models\MedicalEntity;
 use App\Enums\ReportStatus;
 use App\Events\ReportProcessingCompleted;
+use App\Http\Controllers\Controller;
+use App\Models\MedicalEntity;
+use App\Models\MedicalKnowledge;
+use App\Models\MedicalReport;
+use App\Services\NotificationService;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -44,7 +45,7 @@ final class WebhookController extends Controller
                 'trace' => $e->getTraceAsString(),
             ]);
 
-            return ApiResponse::error('Webhook processing failed: ' . $e->getMessage(), 500);
+            return ApiResponse::error('Webhook processing failed: '.$e->getMessage(), 500);
         }
     }
 
@@ -71,7 +72,7 @@ final class WebhookController extends Controller
             ]);
 
             // 2. Create Knowledge entry (delete existing if any to prevent duplicates)
-            $report->knowledge()->delete();
+            $report->knowledge()->forceDelete();
             MedicalKnowledge::create([
                 'report_id' => $report->id,
                 'summary' => $data['summary'],
@@ -83,8 +84,8 @@ final class WebhookController extends Controller
             ]);
 
             // 3. Create entities (delete existing)
-            $report->entities()->delete();
-            if (!empty($data['medical_entities'])) {
+            $report->entities()->forceDelete();
+            if (! empty($data['medical_entities'])) {
                 foreach ($data['medical_entities'] as $ent) {
                     MedicalEntity::create([
                         'report_id' => $report->id,
@@ -99,12 +100,13 @@ final class WebhookController extends Controller
                 }
             }
 
-            // 4. Create timeline event
+            // 4. Create timeline event (clear previous timeline events for this report)
+            $report->timelineEvents()->forceDelete();
             $report->timelineEvents()->create([
                 'profile_id' => $report->profile_id,
                 'event_type' => 'report_upload',
-                'title' => 'Report Processed: ' . $report->title,
-                'description' => 'Medical report ' . $report->title . ' was successfully analyzed by AI.',
+                'title' => 'Report Processed: '.$report->title,
+                'description' => 'Medical report '.$report->title.' was successfully analyzed by AI.',
                 'event_date' => $report->report_date ?? now()->toDateString(),
                 'importance' => 1,
             ]);
@@ -113,12 +115,12 @@ final class WebhookController extends Controller
             try {
                 $user = $report->profile->user;
                 if ($user) {
-                    $notificationService = app(\App\Services\NotificationService::class);
+                    $notificationService = app(NotificationService::class);
                     $notificationService->send(
                         $user,
                         'report_processed',
                         'Medical Report Processed',
-                        "Your medical report '" . $report->title . "' has been successfully analyzed by AI.",
+                        "Your medical report '".$report->title."' has been successfully analyzed by AI.",
                         [
                             'report_id' => $report->id,
                             'status' => 'completed',
@@ -128,7 +130,7 @@ final class WebhookController extends Controller
             } catch (\Throwable $ne) {
                 Log::warning('Failed to send notification on report complete', [
                     'report_id' => $report->id,
-                    'error' => $ne->getMessage()
+                    'error' => $ne->getMessage(),
                 ]);
             }
 

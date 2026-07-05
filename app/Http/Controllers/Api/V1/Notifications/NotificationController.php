@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Api\V1\Notifications;
 
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -69,7 +70,7 @@ final class NotificationController extends Controller
                 data: $notification,
                 message: 'Notification marked as read.'
             );
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        } catch (ModelNotFoundException $e) {
             return ApiResponse::error(
                 message: 'Notification not found.',
                 status: Response::HTTP_NOT_FOUND

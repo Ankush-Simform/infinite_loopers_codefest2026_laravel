@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use Cloudinary\Configuration\Configuration;
 use Cloudinary\Api\Upload\UploadApi;
+use Cloudinary\Configuration\Configuration;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
 
@@ -16,27 +16,26 @@ class CloudinaryService
         Configuration::instance([
             'cloud' => [
                 'cloud_name' => config('services.cloudinary.cloud_name'),
-                'api_key'    => config('services.cloudinary.api_key'),
+                'api_key' => config('services.cloudinary.api_key'),
                 'api_secret' => config('services.cloudinary.api_secret'),
             ],
             'url' => [
-                'secure' => true
-            ]
+                'secure' => true,
+            ],
         ]);
     }
 
     /**
      * Upload an uploaded file to Cloudinary.
      *
-     * @param UploadedFile $file
-     * @param string $folder
      * @return array{url: string, public_id: string, format: string, bytes: int}
+     *
      * @throws \Exception
      */
     public function uploadFile(UploadedFile $file, string $folder = 'amrv'): array
     {
         try {
-            $uploadApi = new UploadApi();
+            $uploadApi = new UploadApi;
             $result = $uploadApi->upload($file->getRealPath(), [
                 'folder' => $folder,
                 'resource_type' => 'auto', // Automatically detects images, PDFs, etc.
@@ -59,21 +58,19 @@ class CloudinaryService
                 'file_name' => $file->getClientOriginalName(),
             ]);
 
-            throw new \Exception('Failed to upload file to cloud storage: ' . $e->getMessage());
+            throw new \Exception('Failed to upload file to cloud storage: '.$e->getMessage());
         }
     }
 
     /**
      * Delete a file from Cloudinary.
      *
-     * @param string $publicId
-     * @param string $resourceType (image, raw, video)
-     * @return bool
+     * @param  string  $resourceType  (image, raw, video)
      */
     public function deleteFile(string $publicId, string $resourceType = 'image'): bool
     {
         try {
-            $uploadApi = new UploadApi();
+            $uploadApi = new UploadApi;
             $result = $uploadApi->destroy($publicId, [
                 'resource_type' => $resourceType,
             ]);

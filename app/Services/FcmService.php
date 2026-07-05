@@ -17,20 +17,22 @@ final class FcmService
         $credentialsPath = config('services.fcm.credentials_path') ?? env('FIREBASE_CREDENTIALS');
         $projectId = config('services.fcm.project_id') ?? env('FIREBASE_PROJECT_ID');
 
-        if (!$credentialsPath || !file_exists($credentialsPath) || !$projectId) {
+        if (! $credentialsPath || ! file_exists($credentialsPath) || ! $projectId) {
             Log::info('Mock FCM Send: Push notification triggered (Firebase credentials not configured)', [
                 'token' => $token,
                 'title' => $title,
                 'body' => $body,
                 'data' => $data,
             ]);
+
             return true;
         }
 
         try {
             $accessToken = $this->getAccessToken($credentialsPath);
-            if (!$accessToken) {
+            if (! $accessToken) {
                 Log::error('FCM Send Failed: Unable to fetch OAuth2 access token.');
+
                 return false;
             }
 
@@ -42,21 +44,22 @@ final class FcmService
                         'title' => $title,
                         'body' => $body,
                     ],
-                ]
+                ],
             ];
 
-            if (!empty($data)) {
+            if (! empty($data)) {
                 // FCM custom data fields must be string-string key-values
                 $payload['message']['data'] = array_map('strval', $data);
             }
 
             $response = Http::withHeaders([
-                'Authorization' => 'Bearer ' . $accessToken,
+                'Authorization' => 'Bearer '.$accessToken,
                 'Content-Type' => 'application/json',
             ])->post("https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send", $payload);
 
             if ($response->successful()) {
                 Log::info('FCM Push Notification sent successfully', ['token' => $token]);
+
                 return true;
             }
 
@@ -81,6 +84,7 @@ final class FcmService
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
+
             return false;
         }
     }
@@ -92,14 +96,14 @@ final class FcmService
     {
         try {
             $credentials = json_decode(file_get_contents($credentialsPath), true);
-            if (!is_array($credentials)) {
+            if (! is_array($credentials)) {
                 return null;
             }
 
             $clientEmail = $credentials['client_email'] ?? null;
             $privateKey = $credentials['private_key'] ?? null;
 
-            if (!$clientEmail || !$privateKey) {
+            if (! $clientEmail || ! $privateKey) {
                 return null;
             }
 
@@ -116,15 +120,15 @@ final class FcmService
             $base64UrlHeader = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($header));
             $base64UrlClaim = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($claim));
 
-            $signatureInput = $base64UrlHeader . '.' . $base64UrlClaim;
+            $signatureInput = $base64UrlHeader.'.'.$base64UrlClaim;
             $signature = '';
 
-            if (!openssl_sign($signatureInput, $signature, $privateKey, OPENSSL_ALGO_SHA256)) {
+            if (! openssl_sign($signatureInput, $signature, $privateKey, OPENSSL_ALGO_SHA256)) {
                 return null;
             }
 
             $base64UrlSignature = str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($signature));
-            $jwt = $signatureInput . '.' . $base64UrlSignature;
+            $jwt = $signatureInput.'.'.$base64UrlSignature;
 
             $response = Http::asForm()->post('https://oauth2.googleapis.com/token', [
                 'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
@@ -139,11 +143,13 @@ final class FcmService
                 'status' => $response->status(),
                 'response' => $response->json(),
             ]);
+
             return null;
         } catch (\Throwable $e) {
             Log::error('Exception generating Google Access Token', [
                 'error' => $e->getMessage(),
             ]);
+
             return null;
         }
     }

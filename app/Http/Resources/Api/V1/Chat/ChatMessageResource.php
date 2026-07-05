@@ -12,13 +12,17 @@ final class ChatMessageResource extends JsonResource
     {
         return [
             'id' => $this->id,
-            'chat_session_id' => $this->chat_session_id,
-            'report_id' => $this->report_id,
-            'role' => $this->role,
-            'content' => $this->content,
-            'metadata' => $this->metadata,
+            'sender' => $this->role instanceof \UnitEnum ? $this->role->value : $this->role,
+            'message' => $this->content,
             'created_at' => $this->created_at?->toDateTimeString(),
-            'updated_at' => $this->updated_at?->toDateTimeString(),
+            'attachments' => $this->attachments->map(fn ($attachment) => [
+                'id' => $attachment->id,
+                'file_name' => $attachment->original_name,
+                'file_type' => $attachment->mime_type,
+                'file_size' => $attachment->file_size,
+                'file_url' => route('api.v1.chats.attachments.show', ['id' => $attachment->id]),
+                'created_at' => $attachment->created_at?->toDateTimeString(),
+            ])->toArray(),
         ];
     }
 }

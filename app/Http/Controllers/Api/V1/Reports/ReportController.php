@@ -5,15 +5,15 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api\V1\Reports;
 
 use App\Enums\ReportStatus;
+use App\Events\ReportUploaded;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Reports\ReportStoreRequest;
 use App\Http\Requests\Api\V1\Reports\ReportUpdateRequest;
 use App\Http\Resources\Api\V1\Reports\ReportResource;
+use App\Jobs\ProcessMedicalReportJob;
 use App\Models\MedicalReport;
 use App\Services\AzureBlobService;
 use App\Support\ApiResponse;
-use App\Events\ReportUploaded;
-use App\Jobs\ProcessMedicalReportJob;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -52,8 +52,8 @@ final class ReportController extends Controller
                 $search = $request->query('search');
                 $query->where(function ($q) use ($search): void {
                     $q->where('title', 'like', "%{$search}%")
-                      ->orWhere('doctor_name', 'like', "%{$search}%")
-                      ->orWhere('hospital_name', 'like', "%{$search}%");
+                        ->orWhere('doctor_name', 'like', "%{$search}%")
+                        ->orWhere('hospital_name', 'like', "%{$search}%");
                 });
             }
 
@@ -72,6 +72,7 @@ final class ReportController extends Controller
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
+
             return ApiResponse::error('An error occurred while listing medical reports.', Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
@@ -92,6 +93,7 @@ final class ReportController extends Controller
                     'profile_id' => $request->profile_id,
                     'file_hash' => $fileHash,
                 ]);
+
                 return ApiResponse::error('This file has already been uploaded for this profile.', Response::HTTP_CONFLICT);
             }
 
@@ -115,8 +117,8 @@ final class ReportController extends Controller
                 $report->timelineEvents()->create([
                     'profile_id' => $report->profile_id,
                     'event_type' => 'report_upload',
-                    'title' => 'Report Uploaded: ' . $report->title,
-                    'description' => 'Medical report ' . $report->title . ' was successfully uploaded.',
+                    'title' => 'Report Uploaded: '.$report->title,
+                    'description' => 'Medical report '.$report->title.' was successfully uploaded.',
                     'event_date' => $report->report_date ?? now()->toDateString(),
                     'importance' => 1,
                 ]);
@@ -148,6 +150,7 @@ final class ReportController extends Controller
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
+
             return ApiResponse::error('An error occurred while uploading medical report.', Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
@@ -169,6 +172,7 @@ final class ReportController extends Controller
                 'user_id' => $request->user()?->id,
                 'error' => $e->getMessage(),
             ]);
+
             return ApiResponse::error('Medical report not found or access denied.', Response::HTTP_NOT_FOUND);
         }
     }
@@ -222,6 +226,7 @@ final class ReportController extends Controller
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
+
             return ApiResponse::error('An error occurred while updating the report.', Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
@@ -251,6 +256,7 @@ final class ReportController extends Controller
                 'user_id' => $request->user()?->id,
                 'error' => $e->getMessage(),
             ]);
+
             return ApiResponse::error('Medical report not found or access denied.', Response::HTTP_NOT_FOUND);
         }
     }
@@ -262,7 +268,7 @@ final class ReportController extends Controller
             $url = $report->file_url;
 
             $parsed = parse_url($url, PHP_URL_PATH);
-            if (!$parsed) {
+            if (! $parsed) {
                 return ApiResponse::error('Invalid report file path.', Response::HTTP_NOT_FOUND);
             }
 
@@ -278,7 +284,7 @@ final class ReportController extends Controller
 
             return response($fileData['content'], 200)
                 ->header('Content-Type', $fileData['mime_type'])
-                ->header('Content-Disposition', 'inline; filename="' . basename($blobName) . '"');
+                ->header('Content-Disposition', 'inline; filename="'.basename($blobName).'"');
         } catch (\Throwable $e) {
             Log::error('Error displaying report file', [
                 'report_id' => $id,

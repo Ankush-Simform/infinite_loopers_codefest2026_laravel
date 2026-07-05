@@ -17,12 +17,14 @@ final class ReportCategoryController extends Controller
         try {
             $categories = ReportCategory::orderBy('name')->get();
             Log::info('Report categories retrieved successfully', ['count' => $categories->count()]);
+
             return ApiResponse::success($categories, 'Report categories retrieved.');
         } catch (\Throwable $e) {
             Log::error('Error retrieving report categories', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
+
             return ApiResponse::error('Failed to retrieve categories.', 500);
         }
     }

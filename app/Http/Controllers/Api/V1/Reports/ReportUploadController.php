@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api\V1\Reports;
 
+use App\Enums\MedicalEntityStatus;
 use App\Enums\ReportStatus;
 use App\Http\Controllers\Controller;
-use App\Http\Resources\Api\V1\Reports\ReportResource;
-use App\Models\MedicalReport;
-use App\Models\MedicalKnowledge;
 use App\Models\MedicalEntity;
+use App\Models\MedicalKnowledge;
+use App\Models\MedicalReport;
 use App\Models\ReportTag;
 use App\Services\AzureBlobService;
 use App\Services\NotificationService;
@@ -53,6 +53,7 @@ final class ReportUploadController extends Controller
                     'profile_id' => $request->profile_id,
                     'file_hash' => $fileHash,
                 ]);
+
                 return ApiResponse::error('This file has already been uploaded for this profile.', Response::HTTP_CONFLICT);
             }
 
@@ -69,7 +70,7 @@ final class ReportUploadController extends Controller
                 'file_hash' => $fileHash,
                 'report_type' => $uploaded['format'],
                 'report' => [
-                    'title' => 'Staged Report - ' . now()->format('Y-m-d H:i'),
+                    'title' => 'Staged Report - '.now()->format('Y-m-d H:i'),
                     'report_type' => $uploaded['format'],
                     'doctor_name' => 'Dr. Andrew Miller',
                     'hospital_name' => 'Central Health Laboratory',
@@ -81,7 +82,7 @@ final class ReportUploadController extends Controller
                     'recommendations' => [
                         'Continue regular hydration.',
                         'Schedule follow-up check in 6 months.',
-                        'Keep moderate daily physical exercise.'
+                        'Keep moderate daily physical exercise.',
                     ],
                     'confidence_score' => 97.80,
                 ],
@@ -92,8 +93,8 @@ final class ReportUploadController extends Controller
                         'value' => '120',
                         'unit' => 'mmHg',
                         'reference_range' => '90-120',
-                        'status' => 'normal',
-                        'confidence' => 99.00
+                        'status' => 'Normal',
+                        'confidence' => 99.00,
                     ],
                     [
                         'entity_type' => 'vital',
@@ -101,8 +102,8 @@ final class ReportUploadController extends Controller
                         'value' => '80',
                         'unit' => 'mmHg',
                         'reference_range' => '60-80',
-                        'status' => 'normal',
-                        'confidence' => 99.00
+                        'status' => 'Normal',
+                        'confidence' => 99.00,
                     ],
                     [
                         'entity_type' => 'lab_value',
@@ -110,15 +111,15 @@ final class ReportUploadController extends Controller
                         'value' => '14.2',
                         'unit' => 'g/dL',
                         'reference_range' => '13.8-17.2',
-                        'status' => 'normal',
-                        'confidence' => 98.50
-                    ]
+                        'status' => 'Normal',
+                        'confidence' => 98.50,
+                    ],
                 ],
-                'tags' => ['blood-test', 'vitals']
+                'tags' => ['blood-test', 'vitals'],
             ];
 
             // Store in Cache temporary storage for 24 hours
-            Cache::put('temp_upload_' . $uploadId, $stagedData, now()->addDay());
+            Cache::put('temp_upload_'.$uploadId, $stagedData, now()->addDay());
 
             Log::info('Staged medical report uploaded successfully', [
                 'upload_id' => $uploadId,
@@ -135,7 +136,8 @@ final class ReportUploadController extends Controller
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
-            return ApiResponse::error('An error occurred during upload: ' . $e->getMessage(), Response::HTTP_INTERNAL_SERVER_ERROR);
+
+            return ApiResponse::error('An error occurred during upload: '.$e->getMessage(), Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -145,7 +147,7 @@ final class ReportUploadController extends Controller
     public function status(Request $request, string $upload_id): JsonResponse
     {
         try {
-            $data = Cache::get('temp_upload_' . $upload_id);
+            $data = Cache::get('temp_upload_'.$upload_id);
 
             if ($data === null) {
                 return ApiResponse::error('Temporary upload not found or expired.', Response::HTTP_NOT_FOUND);
@@ -170,6 +172,7 @@ final class ReportUploadController extends Controller
                 'upload_id' => $upload_id,
                 'error' => $e->getMessage(),
             ]);
+
             return ApiResponse::error('Failed to get status.', Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
@@ -180,7 +183,7 @@ final class ReportUploadController extends Controller
     public function review(Request $request, string $upload_id): JsonResponse
     {
         try {
-            $data = Cache::get('temp_upload_' . $upload_id);
+            $data = Cache::get('temp_upload_'.$upload_id);
 
             if ($data === null) {
                 return ApiResponse::error('Temporary upload not found or expired.', Response::HTTP_NOT_FOUND);
@@ -198,6 +201,7 @@ final class ReportUploadController extends Controller
                 'upload_id' => $upload_id,
                 'error' => $e->getMessage(),
             ]);
+
             return ApiResponse::error('Failed to retrieve review details.', Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
@@ -208,7 +212,7 @@ final class ReportUploadController extends Controller
     public function save(Request $request, string $upload_id): JsonResponse
     {
         try {
-            $data = Cache::get('temp_upload_' . $upload_id);
+            $data = Cache::get('temp_upload_'.$upload_id);
 
             if ($data === null) {
                 return ApiResponse::error('Temporary upload not found or expired.', Response::HTTP_NOT_FOUND);
@@ -257,6 +261,15 @@ final class ReportUploadController extends Controller
                 // 3. Create Entities (use edited fields if provided, fallback to staged data)
                 $entitiesInput = $request->input('entities') ?? $data['entities'];
                 foreach ($entitiesInput as $ent) {
+                    $status = null;
+                    if (isset($ent['status']) && $ent['status'] !== null) {
+                        $normalizedStatus = ucfirst(strtolower((string) $ent['status']));
+                        $statusCase = MedicalEntityStatus::tryFrom($normalizedStatus);
+                        if ($statusCase) {
+                            $status = $statusCase;
+                        }
+                    }
+
                     MedicalEntity::create([
                         'report_id' => $report->id,
                         'entity_type' => $ent['entity_type'] ?? 'vital',
@@ -264,7 +277,7 @@ final class ReportUploadController extends Controller
                         'value' => $ent['value'] ?? null,
                         'unit' => $ent['unit'] ?? null,
                         'reference_range' => $ent['reference_range'] ?? null,
-                        'status' => $ent['status'] ?? null,
+                        'status' => $status,
                         'confidence' => $ent['confidence'] ?? 100.00,
                     ]);
                 }
@@ -282,8 +295,8 @@ final class ReportUploadController extends Controller
                 $report->timelineEvents()->create([
                     'profile_id' => $report->profile_id,
                     'event_type' => 'report_upload',
-                    'title' => 'Report Uploaded: ' . $report->title,
-                    'description' => 'Medical report ' . $report->title . ' was successfully saved and reviewed.',
+                    'title' => 'Report Uploaded: '.$report->title,
+                    'description' => 'Medical report '.$report->title.' was successfully saved and reviewed.',
                     'event_date' => $report->report_date ?? now()->toDateString(),
                     'importance' => 1,
                 ]);
@@ -292,7 +305,7 @@ final class ReportUploadController extends Controller
             });
 
             // Clean up cache
-            Cache::forget('temp_upload_' . $upload_id);
+            Cache::forget('temp_upload_'.$upload_id);
 
             // Send in-app and push notification to the user
             try {
@@ -303,7 +316,7 @@ final class ReportUploadController extends Controller
                         $user,
                         'report_processed',
                         'Medical Report Processed',
-                        'Your medical report "' . ($report?->title ?? 'New Report') . '" has been successfully analyzed.',
+                        'Your medical report "'.($report?->title ?? 'New Report').'" has been successfully analyzed.',
                         ['report_id' => $reportId]
                     );
                 }
@@ -329,6 +342,7 @@ final class ReportUploadController extends Controller
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
+
             return ApiResponse::error('Failed to finalize and save report.', Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }

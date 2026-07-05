@@ -717,20 +717,65 @@
         "requestBody": {
           "required": true,
           "content": {
-            "application/json": {
+            "multipart/form-data": {
               "schema": {
                 "type": "object",
-                "required": ["content"],
                 "properties": {
-                  "content": { "type": "string", "example": "Can you analyze my blood test report and tell me if my cholesterol is fine?" },
-                  "report_id": { "type": "integer", "example": 1, "description": "Optional linked report ID context" }
+                  "content": {
+                    "type": "string",
+                    "example": "Can you analyze my blood test report and tell me if my cholesterol is fine?",
+                    "description": "Required if attachments are empty."
+                  },
+                  "report_id": {
+                    "type": "integer",
+                    "example": 1,
+                    "description": "Optional linked report ID context"
+                  },
+                  "attachments": {
+                    "type": "array",
+                    "description": "Optional file attachments (Max 2, Max 5MB each, pdf/jpg/jpeg/png)",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    }
+                  }
                 }
               }
             }
           }
         },
         "responses": {
-          "200": { "description": "Returns user message and generated AI reply." }
+          "200": {
+            "description": "Streams real-time response chunks from the AI.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "example": "Hello Meet, after reviewing..."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chats/attachments/{id}": {
+      "get": {
+        "tags": ["6. AI Chat"],
+        "summary": "Download a chat attachment securely",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "File stream returned.",
+            "headers": {
+              "Content-Disposition": {
+                "schema": { "type": "string", "example": "inline; filename=\"report.pdf\"" }
+              }
+            }
+          },
+          "404": { "description": "Attachment not found or access denied." }
         }
       }
     },
