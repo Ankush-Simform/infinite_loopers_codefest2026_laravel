@@ -10,4 +10,6 @@ enum MedicalEntityStatus: string
     case HIGH = 'High';
     case LOW = 'Low';
     case CRITICAL = 'Critical';
+    case POSITIVE = 'Positive';
+    case NEGATIVE = 'Negative';
 }
