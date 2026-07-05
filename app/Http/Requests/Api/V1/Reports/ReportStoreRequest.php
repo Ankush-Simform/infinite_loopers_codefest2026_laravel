@@ -13,7 +13,7 @@ final class ReportStoreRequest extends ApiFormRequest
     {
         return [
             'report_profile_id' => [
-                'required',
+                'nullable',
                 Rule::exists('report_profiles', 'id')->where(function ($query): void {
                     $query->where('user_id', $this->user()?->id);
                 }),
