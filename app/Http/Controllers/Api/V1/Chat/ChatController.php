@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api\V1\Chat;
 
 use App\Contracts\AiServiceContract;
-use App\Enums\ChatMessageRole;
 use App\Events\ChatMessageStreamed;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Chat\ChatMessageStoreRequest;
@@ -20,10 +19,9 @@ use App\Services\ChatService;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\HttpFoundation\StreamedJsonResponse;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 final class ChatController extends Controller
@@ -147,140 +145,134 @@ final class ChatController extends Controller
         }
     }
 
-    public function sendMessage(ChatMessageStoreRequest $request, string $id): StreamedJsonResponse
+    /**
+     * Stream the AI's reply back as plain-text chunks over a chunked HTTP response —
+     * simple for a Flutter client to consume via a streamed request without needing
+     * SSE/EventSource support, and it degrades to a single flush if buffering happens.
+     *
+     * Errors before this point (session lookup, attachment upload, saving the user's
+     * message) throw and are rendered by the global exception handler as normal JSON
+     * errors. Once streaming starts, headers are already committed, so failures from
+     * here on are handled in-band: logged, surfaced to the client as a chat message,
+     * and still persisted so the conversation has a complete record.
+     */
+    public function sendMessage(ChatMessageStoreRequest $request, string $id): StreamedResponse
     {
-        try {
-            $user = $request->user();
-            $session = $user->chatSessions()->findOrFail($id);
+        $user = $request->user();
+        $session = $user->chatSessions()->findOrFail($id);
 
-            // Upload attachments and prepare DB records
-            $dbAttachments = [];
-            $attachmentsMetadata = [];
+        $dbAttachments = [];
+        $attachmentsMetadata = [];
 
-            if ($request->hasFile('attachments')) {
-                // Returns DB-ready arrays, or throws on failure (safely rolling back Azure uploads)
-                $dbAttachments = $this->attachmentUploadService->uploadAttachments(
-                    $request->file('attachments'),
-                    (int) $user->id,
-                    (int) $session->id
-                );
+        if ($request->hasFile('attachments')) {
+            // Returns DB-ready arrays, or throws on failure (safely rolling back Azure uploads)
+            $dbAttachments = $this->attachmentUploadService->uploadAttachments(
+                $request->file('attachments'),
+                (int) $user->id,
+                (int) $session->id
+            );
 
-                // Build metadata format expected by the AI service
-                foreach ($dbAttachments as $attachment) {
-                    $attachmentsMetadata[] = [
-                        'storage_provider' => 'azure_blob',
-                        'container' => config('services.azure.storage_container', 'amrv-container'),
-                        'blob_name' => $attachment['stored_name'],
-                        'original_file_name' => $attachment['original_name'],
-                        'mime_type' => $attachment['mime_type'],
-                        'size' => $attachment['file_size'],
-                    ];
-                }
+            // Build metadata format expected by the AI service
+            foreach ($dbAttachments as $attachment) {
+                $attachmentsMetadata[] = [
+                    'storage_provider' => 'azure_blob',
+                    'container' => config('services.azure.storage_container', 'amrv-container'),
+                    'blob_name' => $attachment['stored_name'],
+                    'original_file_name' => $attachment['original_name'],
+                    'mime_type' => $attachment['mime_type'],
+                    'size' => $attachment['file_size'],
+                ];
             }
+        }
+
+        try {
+            $validated = $request->validated();
+            $userMessage = $this->chatService->saveUserMessage(
+                $session,
+                $validated['content'],
+                $dbAttachments,
+                $validated['metadata'] ?? null
+            );
+        } catch (\Throwable $e) {
+            // If DB insert fails, roll back uploaded Azure files to prevent orphan blobs
+            $this->attachmentUploadService->rollbackUploadedBlobs();
+            throw $e;
+        }
+
+        Log::info('User message saved. Starting AI service live stream.', [
+            'session_id' => $session->id,
+            'user_id' => $user->id,
+            'message_id' => $userMessage->id,
+        ]);
+
+        return response()->stream(function () use ($user, $session, $userMessage, $attachmentsMetadata) {
+            $accumulatedResponse = '';
 
             try {
-                $validated = $request->validated();
-                $userMessage = $this->chatService->saveUserMessage(
-                    $session,
-                    $validated['content'],
-                    $validated['report_id'] ?? null,
-                    $dbAttachments,
-                    $validated['metadata'] ?? null
-                );
-            } catch (\Throwable $e) {
-                // If DB insert fails, roll back uploaded Azure files to prevent orphan blobs
-                $this->attachmentUploadService->rollbackUploadedBlobs();
-                throw $e;
-            }
-
-            // Fetch recent conversation history context (last 10 messages before this new one)
-            $history = $session->messages()
-                ->where('id', '<', $userMessage->id)
-                ->latest()
-                ->limit(10)
-                ->get()
-                ->reverse()
-                ->map(fn ($msg) => [
-                    'role' => $msg->role->value,
-                    'content' => $msg->content,
-                ])
-                ->values()
-                ->toArray();
-
-            Log::info('User message saved. Starting AI Service live stream.', [
-                'session_id' => $session->id,
-                'user_id' => $user->id,
-                'message_id' => $userMessage->id,
-            ]);
-
-            // Stream response
-            return response()->stream(function () use ($user, $session, $userMessage, $history, $attachmentsMetadata) {
-                $accumulatedResponse = '';
-
                 $this->aiService->streamChatResponse(
                     (int) $user->id,
                     (int) $session->id,
                     $userMessage->content,
-                    $history,
                     $attachmentsMetadata,
-                    function ($chunk) use (&$accumulatedResponse, $session) {
+                    function (string $chunk) use (&$accumulatedResponse, $session) {
                         $accumulatedResponse .= $chunk;
 
-                        // Broadcast live token chunk
+                        // Broadcast the live chunk so any other connected client for this session updates in real time
                         try {
                             broadcast(new ChatMessageStreamed($session->id, $chunk))->toOthers();
                         } catch (\Throwable $e) {
-                            Log::warning('Failed to broadcast live chat chunk', ['error' => $e->getMessage()]);
+                            Log::warning('Failed to broadcast live chat chunk', [
+                                'session_id' => $session->id,
+                                'error' => $e->getMessage(),
+                            ]);
                         }
 
-                        // Echo chunk directly to client
-                        echo $chunk;
-                        if (ob_get_level() > 0) {
-                            ob_flush();
-                        }
-                        flush();
+                        $this->pushChunk($chunk);
                     }
                 );
+            } catch (\Throwable $e) {
+                // The 200 status and headers are already sent, so a JSON error response is
+                // no longer possible — degrade gracefully in-band instead.
+                Log::error('AI service failed to stream a chat response', [
+                    'session_id' => $session->id,
+                    'user_id' => $user->id,
+                    'error' => $e->getMessage(),
+                ]);
 
-                // Save final assistant response in DB
-                if (trim($accumulatedResponse) !== '') {
-                    try {
-                        $contentToSave = $accumulatedResponse;
-                        $decoded = json_decode($accumulatedResponse, true);
-                        if (is_array($decoded) && isset($decoded['data']['response_text'])) {
-                            $contentToSave = $decoded['data']['response_text'];
-                        } elseif (is_array($decoded) && isset($decoded['message'])) {
-                            $contentToSave = $decoded['message'];
-                        }
+                $accumulatedResponse = "I'm currently unable to reach my medical analysis engine. Please try again in a few moments.";
+                $this->pushChunk($accumulatedResponse);
+            }
 
-                        $session->messages()->create([
-                            'role' => ChatMessageRole::ASSISTANT,
-                            'content' => $contentToSave,
-                        ]);
-                        $session->update(['last_message_at' => now()]);
-                    } catch (\Throwable $e) {
-                        Log::error('Failed to cache assistant reply in database', [
-                            'session_id' => $session->id,
-                            'error' => $e->getMessage(),
-                        ]);
-                    }
-                }
-            }, 200, [
-                'Content-Type' => 'text/plain; charset=UTF-8',
-                'Cache-Control' => 'no-cache, must-revalidate',
-                'Connection' => 'keep-alive',
-                'X-Accel-Buffering' => 'no',
-            ]);
-        } catch (\Throwable $e) {
-            Log::error('Error sending chat message', [
-                'session_id' => $id,
-                'user_id' => $request->user()?->id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
+            if (trim($accumulatedResponse) === '') {
+                return;
+            }
 
-            return ApiResponse::error('An error occurred while sending the message.', Response::HTTP_INTERNAL_SERVER_ERROR);
+            try {
+                $this->chatService->saveAssistantMessage($session, $accumulatedResponse);
+            } catch (\Throwable $e) {
+                Log::error('Failed to persist assistant reply', [
+                    'session_id' => $session->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }, 200, [
+            'Content-Type' => 'text/plain; charset=UTF-8',
+            'Cache-Control' => 'no-cache, must-revalidate',
+            'Connection' => 'keep-alive',
+            'X-Accel-Buffering' => 'no',
+        ]);
+    }
+
+    /**
+     * Write a chunk straight to the open HTTP connection.
+     */
+    private function pushChunk(string $chunk): void
+    {
+        echo $chunk;
+        if (ob_get_level() > 0) {
+            ob_flush();
         }
+        flush();
     }
 
     public function destroy(Request $request, string $id): JsonResponse

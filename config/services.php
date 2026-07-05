@@ -35,13 +35,13 @@ return [
         ],
     ],
 
-    'flask' => [
-        'base_url' => env('FLASK_API_BASE_URL', 'http://127.0.0.1:5000/api/v1'),
-        'timeout' => env('FLASK_API_TIMEOUT', 30),
-        'retries' => env('FLASK_API_RETRIES', 2),
-        'retry_sleep_ms' => env('FLASK_API_RETRY_SLEEP_MS', 250),
+    'ai' => [
+        'base_url' => env('AI_API_BASE_URL', 'http://127.0.0.1:5000/api/v1'),
+        'timeout' => env('AI_API_TIMEOUT', 30),
+        'retries' => env('AI_API_RETRIES', 2),
+        'retry_sleep_ms' => env('AI_API_RETRY_SLEEP_MS', 250),
         'shared_secret' => env('AI_SERVICE_SHARED_SECRET', 'super-secret-key-123!'),
-        'mock_enabled' => (bool) env('FLASK_API_MOCK_ENABLED', true),
+        'mock_enabled' => (bool) env('AI_API_MOCK_ENABLED', true),
     ],
 
     'google' => [

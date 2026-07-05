@@ -41,7 +41,7 @@ final class ProfileController extends Controller
 
 ### Business logic, orchestration, or an external integration (Azure Blob Storage, AI microservice, notifications)
 
-Put the logic in a Service class under `app/Services/{Domain}/`, matching the pre-scaffolded folders: `Auth`, `Chat`, `Health`, `Notifications`, `Profile`, `Reports`. Controllers must never call an external HTTP client directly — wrap it in a Service (and, for AI calls, `App\Integrations\Flask\FlaskApiService` per `app/Services/README.md`, once it exists).
+Put the logic in a Service class under `app/Services/{Domain}/`, matching the pre-scaffolded folders: `Auth`, `Chat`, `Health`, `Notifications`, `Profile`, `Reports`. Controllers must never call an external HTTP client directly — wrap it in a Service (and, for AI calls, `App\Integrations\AIApiService` per `app/Services/README.md`, once it exists).
 
 ```php
 final class ReportController extends Controller
@@ -130,12 +130,12 @@ public function login(LoginRequest $request)
 
 Every controller response must go through this class. Fields are **`success`, `message`, `data`, `errors`, `meta`** — not `status`/`code`.
 
-| Method | Use for |
-|---|---|
-| `ApiResponse::success($data, $message, $status = 200)` | Any 2xx response |
-| `ApiResponse::error($message, $status = 400, $errors = [])` | Business-rule failures, auth failures |
-| `ApiResponse::validationError($errors)` | Validation failures — used automatically by `ApiFormRequest::failedValidation()` |
-| `ApiResponse::paginated($paginator, $message)` | Paginated list responses — wraps `meta.pagination` automatically |
+| Method                                                      | Use for                                                                          |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `ApiResponse::success($data, $message, $status = 200)`      | Any 2xx response                                                                 |
+| `ApiResponse::error($message, $status = 400, $errors = [])` | Business-rule failures, auth failures                                            |
+| `ApiResponse::validationError($errors)`                     | Validation failures — used automatically by `ApiFormRequest::failedValidation()` |
+| `ApiResponse::paginated($paginator, $message)`              | Paginated list responses — wraps `meta.pagination` automatically                 |
 
 ```json
 { "success": true,  "message": "Profile created.",     "data": { "...": "..." }, "meta": {} }
@@ -150,9 +150,9 @@ Do not invent a different envelope shape or add ad hoc top-level keys — put ex
 
 Throw a subclass of `App\Exceptions\ApiException`, never a bare `\Exception`/`\RuntimeException`/`\LogicException`. `ApiException` self-renders via `render(): JsonResponse` using `ApiResponse::error()`, so nothing needs to catch it.
 
-| Class | When to use |
-|---|---|
-| `ApiException` | Generic API-facing failure with a specific status code |
+| Class                      | When to use                                                                      |
+| -------------------------- | -------------------------------------------------------------------------------- |
+| `ApiException`             | Generic API-facing failure with a specific status code                           |
 | `ExternalServiceException` | Azure Blob Storage or AI microservice call fails (defaults to `502 Bad Gateway`) |
 
 If neither fits (e.g. a locked-report violation, an OTP failure), add a new class in `app/Exceptions/` extending `ApiException`:
@@ -303,7 +303,7 @@ No PHPStan/Larastan or SonarQube gate is configured in this repo — the only en
 ./vendor/bin/pint
 ```
 
-Still apply the *spirit* of static-analysis discipline even without the tooling:
+Still apply the _spirit_ of static-analysis discipline even without the tooling:
 
 - Explicit parameter and return types on every method
 - No unused imports, variables, or unreachable code

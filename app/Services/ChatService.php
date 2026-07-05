@@ -22,14 +22,12 @@ class ChatService
     public function saveUserMessage(
         ChatSession $session,
         ?string $content,
-        ?int $reportId,
         array $dbAttachments,
         ?array $metadata = null
     ): ChatMessage {
-        return DB::transaction(function () use ($session, $content, $reportId, $dbAttachments, $metadata) {
+        return DB::transaction(function () use ($session, $content, $dbAttachments, $metadata) {
             // 1. Save user's message record
             $msg = $session->messages()->create([
-                'report_id' => $reportId,
                 'role' => ChatMessageRole::USER,
                 'content' => $content ?? '',
                 'metadata' => $metadata,
@@ -41,6 +39,24 @@ class ChatService
             }
 
             // 3. Update session's last message timestamp
+            $session->update(['last_message_at' => now()]);
+
+            return $msg;
+        });
+    }
+
+    /**
+     * Persist the AI's fully-streamed reply so every conversation has a durable record,
+     * independent of whether the client stayed connected for the whole stream.
+     */
+    public function saveAssistantMessage(ChatSession $session, string $content): ChatMessage
+    {
+        return DB::transaction(function () use ($session, $content) {
+            $msg = $session->messages()->create([
+                'role' => ChatMessageRole::ASSISTANT,
+                'content' => $content,
+            ]);
+
             $session->update(['last_message_at' => now()]);
 
             return $msg;
