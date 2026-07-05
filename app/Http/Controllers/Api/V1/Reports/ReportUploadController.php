@@ -92,7 +92,7 @@ final class ReportUploadController extends Controller
                         'value' => '120',
                         'unit' => 'mmHg',
                         'reference_range' => '90-120',
-                        'status' => 'normal',
+                        'status' => 'Normal',
                         'confidence' => 99.00,
                     ],
                     [
@@ -101,7 +101,7 @@ final class ReportUploadController extends Controller
                         'value' => '80',
                         'unit' => 'mmHg',
                         'reference_range' => '60-80',
-                        'status' => 'normal',
+                        'status' => 'Normal',
                         'confidence' => 99.00,
                     ],
                     [
@@ -110,7 +110,7 @@ final class ReportUploadController extends Controller
                         'value' => '14.2',
                         'unit' => 'g/dL',
                         'reference_range' => '13.8-17.2',
-                        'status' => 'normal',
+                        'status' => 'Normal',
                         'confidence' => 98.50,
                     ],
                 ],
@@ -260,6 +260,15 @@ final class ReportUploadController extends Controller
                 // 3. Create Entities (use edited fields if provided, fallback to staged data)
                 $entitiesInput = $request->input('entities') ?? $data['entities'];
                 foreach ($entitiesInput as $ent) {
+                    $status = null;
+                    if (isset($ent['status']) && $ent['status'] !== null) {
+                        $normalizedStatus = ucfirst(strtolower((string) $ent['status']));
+                        $statusCase = \App\Enums\MedicalEntityStatus::tryFrom($normalizedStatus);
+                        if ($statusCase) {
+                            $status = $statusCase;
+                        }
+                    }
+
                     MedicalEntity::create([
                         'report_id' => $report->id,
                         'entity_type' => $ent['entity_type'] ?? 'vital',
@@ -267,7 +276,7 @@ final class ReportUploadController extends Controller
                         'value' => $ent['value'] ?? null,
                         'unit' => $ent['unit'] ?? null,
                         'reference_range' => $ent['reference_range'] ?? null,
-                        'status' => $ent['status'] ?? null,
+                        'status' => $status,
                         'confidence' => $ent['confidence'] ?? 100.00,
                     ]);
                 }
