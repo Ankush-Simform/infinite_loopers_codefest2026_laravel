@@ -403,6 +403,21 @@
         }
       }
     },
+    "/reports/upload/{upload_id}/file": {
+      "get": {
+        "tags": ["4. Medical Reports"],
+        "summary": "Retrieve Staged Report File securely",
+        "description": "Downloads / streams the original staged file from temporary storage.",
+        "parameters": [
+          { "name": "upload_id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "token", "in": "query", "required": false, "schema": { "type": "string" }, "description": "Bearer token query parameter (optional, if Authorization header is not used)" }
+        ],
+        "responses": {
+          "200": { "description": "File stream returned." },
+          "404": { "description": "Staged report file not found or expired." }
+        }
+      }
+    },
     "/reports/upload/{upload_id}/save": {
       "post": {
         "tags": ["4. Medical Reports"],
@@ -531,7 +546,8 @@
         "summary": "Securely stream/download medical report file",
         "description": "Validates report ownership, retrieves the private file from Azure Blob Storage, and streams the binary content directly inline to the authenticated user.",
         "parameters": [
-          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "token", "in": "query", "required": false, "schema": { "type": "string" }, "description": "Bearer token query parameter (optional, if Authorization header is not used)" }
         ],
         "responses": {
           "200": {
@@ -731,7 +747,7 @@
                     "example": 1,
                     "description": "Optional linked report ID context"
                   },
-                  "attachments": {
+                  "attachments[]": {
                     "type": "array",
                     "description": "Optional file attachments (Max 2, Max 5MB each, pdf/jpg/jpeg/png)",
                     "items": {
@@ -764,7 +780,8 @@
         "tags": ["6. AI Chat"],
         "summary": "Download a chat attachment securely",
         "parameters": [
-          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "token", "in": "query", "required": false, "schema": { "type": "string" }, "description": "Bearer token query parameter (optional, if Authorization header is not used)" }
         ],
         "responses": {
           "200": {

@@ -15,7 +15,18 @@ final class ChatAttachmentResource extends JsonResource
             'file_name' => $this->original_name,
             'file_type' => $this->mime_type,
             'file_size' => $this->file_size,
-            'file_url' => route('api.v1.chats.attachments.show', ['id' => $this->id]),
+            'file_url' => (function () {
+                $url = route('api.v1.chats.attachments.show', ['id' => $this->id]);
+                $token = null;
+                $authorization = request()->header('Authorization');
+                if ($authorization && str_starts_with($authorization, 'Bearer ')) {
+                    $token = substr($authorization, 7);
+                } elseif (request()->has('token')) {
+                    $token = request()->query('token');
+                }
+
+                return $token ? $url.'?token='.$token : $url;
+            })(),
             'created_at' => $this->created_at?->toDateTimeString(),
         ];
     }

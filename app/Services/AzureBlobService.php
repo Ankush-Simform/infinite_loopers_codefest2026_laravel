@@ -306,4 +306,45 @@ class AzureBlobService
             throw new \Exception('Failed to download stream from Azure storage: '.$e->getMessage());
         }
     }
+
+    /**
+     * Generate a Shared Access Signature (SAS) URL for a blob.
+     */
+    public function generateSasUrl(string $blobName, int $expiryMinutes = 15): string
+    {
+        $expiry = gmdate('Y-m-d\TH:i:s\Z', time() + ($expiryMinutes * 60));
+
+        $stringToSign = implode("\n", [
+            'r', // sp
+            '',  // st
+            $expiry, // se
+            "/blob/{$this->accountName}/{$this->containerName}/{$blobName}", // canonicalizedresource
+            '', // si
+            '', // sip
+            'https', // spr
+            '2021-08-06', // sv
+            'b', // sr
+            '', // snapshot
+            '', // signedencryptionscope
+            '', // rscc
+            '', // rscd
+            '', // rsce
+            '', // rscl
+            '',  // rsct
+        ]);
+
+        $decodedKey = base64_decode($this->accountKey);
+        $signature = base64_encode(hash_hmac('sha256', $stringToSign, $decodedKey, true));
+
+        $queryParams = http_build_query([
+            'sp' => 'r',
+            'se' => $expiry,
+            'spr' => 'https',
+            'sv' => '2021-08-06',
+            'sr' => 'b',
+            'sig' => $signature,
+        ]);
+
+        return "https://{$this->accountName}.blob.core.windows.net/{$this->containerName}/{$blobName}?{$queryParams}";
+    }
 }

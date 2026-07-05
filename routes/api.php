@@ -66,6 +66,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::post('reports/upload', [ReportUploadController::class, 'upload'])->name('reports.upload');
         Route::get('reports/upload/{upload_id}/status', [ReportUploadController::class, 'status'])->name('reports.upload.status');
         Route::get('reports/upload/{upload_id}/review', [ReportUploadController::class, 'review'])->name('reports.upload.review');
+        Route::get('reports/upload/{upload_id}/file', [ReportUploadController::class, 'showFile'])->name('reports.upload.file');
         Route::post('reports/upload/{upload_id}/save', [ReportUploadController::class, 'save'])->name('reports.upload.save');
 
         // Timelines API
