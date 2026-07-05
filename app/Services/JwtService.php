@@ -10,10 +10,13 @@ use Illuminate\Support\Facades\Log;
 final class JwtService
 {
     public const PURPOSE_AUTH = 'auth';
+
     public const PURPOSE_EMAIL_VERIFICATION = 'email_verification';
 
     private string $secret;
+
     private int $ttl; // in seconds
+
     private int $emailVerificationTtl;
 
     public function __construct()
@@ -45,7 +48,6 @@ final class JwtService
     private function generateUserToken(User $user, string $purpose, int $ttl, array $claims = []): string
     {
         $header = json_encode(['alg' => 'HS256', 'typ' => 'JWT']);
-        
         $payload = json_encode(array_merge([
             'sub' => $user->id,
             'email' => $user->email,
@@ -57,10 +59,10 @@ final class JwtService
         $base64UrlHeader = $this->base64UrlEncode($header);
         $base64UrlPayload = $this->base64UrlEncode($payload);
 
-        $signature = hash_hmac('sha256', $base64UrlHeader . "." . $base64UrlPayload, $this->secret, true);
+        $signature = hash_hmac('sha256', $base64UrlHeader.'.'.$base64UrlPayload, $this->secret, true);
         $base64UrlSignature = $this->base64UrlEncode($signature);
 
-        return $base64UrlHeader . "." . $base64UrlPayload . "." . $base64UrlSignature;
+        return $base64UrlHeader.'.'.$base64UrlPayload.'.'.$base64UrlSignature;
     }
 
     /**
@@ -76,9 +78,9 @@ final class JwtService
         [$base64UrlHeader, $base64UrlPayload, $base64UrlSignature] = $parts;
 
         $signature = $this->base64UrlDecode($base64UrlSignature);
-        $expectedSignature = hash_hmac('sha256', $base64UrlHeader . "." . $base64UrlPayload, $this->secret, true);
+        $expectedSignature = hash_hmac('sha256', $base64UrlHeader.'.'.$base64UrlPayload, $this->secret, true);
 
-        if (!hash_equals($signature, $expectedSignature)) {
+        if (! hash_equals($signature, $expectedSignature)) {
             return null;
         }
 
@@ -89,6 +91,7 @@ final class JwtService
 
         if (isset($payload['exp']) && $payload['exp'] < time()) {
             Log::warning('JWT token expired', ['user_id' => $payload['sub'] ?? null]);
+
             return null;
         }
 
@@ -98,6 +101,7 @@ final class JwtService
                 'expected_purpose' => $purpose,
                 'actual_purpose' => $payload['purpose'] ?? null,
             ]);
+
             return null;
         }
 

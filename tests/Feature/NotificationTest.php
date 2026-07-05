@@ -4,23 +4,25 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
-use App\Models\User;
-use App\Models\ReportProfile;
-use App\Models\UserDevice;
-use App\Models\Notification;
-use App\Models\MedicalReport;
-use App\Jobs\SendPushNotificationJob;
-use App\Jobs\ProcessMedicalReportJob;
-use App\Events\ReportUploaded;
-use App\Events\OcrStarted;
 use App\Events\OcrCompleted;
-use App\Events\AiProcessing;
+use App\Events\OcrStarted;
 use App\Events\ReportProcessingCompleted;
+use App\Events\ReportUploaded;
+use App\Jobs\ProcessMedicalReportJob;
+use App\Jobs\SendPushNotificationJob;
+use App\Models\MedicalReport;
+use App\Models\Notification;
+use App\Models\ReportCategory;
+use App\Models\ReportProfile;
+use App\Models\User;
+use App\Models\UserDevice;
+use App\Services\AzureBlobService;
+use App\Services\JwtService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class NotificationTest extends TestCase
@@ -28,7 +30,9 @@ class NotificationTest extends TestCase
     use RefreshDatabase;
 
     protected User $user;
+
     protected string $token;
+
     protected ReportProfile $profile;
 
     protected function setUp(): void
@@ -48,7 +52,7 @@ class NotificationTest extends TestCase
             'relation' => 'self',
         ]);
 
-        $this->token = app(\App\Services\JwtService::class)->generateToken($this->user);
+        $this->token = app(JwtService::class)->generateToken($this->user);
     }
 
     /**
@@ -56,7 +60,7 @@ class NotificationTest extends TestCase
      */
     public function test_device_token_registration(): void
     {
-        $response = $this->withHeaders(['Authorization' => 'Bearer ' . $this->token])
+        $response = $this->withHeaders(['Authorization' => 'Bearer '.$this->token])
             ->postJson('/api/v1/devices', [
                 'fcm_token' => 'mock_fcm_token_123',
                 'device_name' => 'iPhone 15 Pro',
@@ -98,10 +102,10 @@ class NotificationTest extends TestCase
             'password' => bcrypt('password'),
             'email_verified_at' => now(),
         ]);
-        $otherToken = app(\App\Services\JwtService::class)->generateToken($otherUser);
+        $otherToken = app(JwtService::class)->generateToken($otherUser);
 
         // Second user registers same token
-        $response = $this->withHeaders(['Authorization' => 'Bearer ' . $otherToken])
+        $response = $this->withHeaders(['Authorization' => 'Bearer '.$otherToken])
             ->postJson('/api/v1/devices', [
                 'fcm_token' => 'shared_token',
                 'device_name' => 'Pixel 8',
@@ -130,7 +134,7 @@ class NotificationTest extends TestCase
             'is_active' => true,
         ]);
 
-        $response = $this->withHeaders(['Authorization' => 'Bearer ' . $this->token])
+        $response = $this->withHeaders(['Authorization' => 'Bearer '.$this->token])
             ->deleteJson('/api/v1/devices', [
                 'fcm_token' => 'token_to_delete',
             ]);
@@ -163,14 +167,14 @@ class NotificationTest extends TestCase
         ]);
 
         // 1. Get all notifications
-        $response = $this->withHeaders(['Authorization' => 'Bearer ' . $this->token])
+        $response = $this->withHeaders(['Authorization' => 'Bearer '.$this->token])
             ->getJson('/api/v1/notifications');
 
         $response->assertOk()
             ->assertJsonCount(2, 'data');
 
         // 2. Get unread only
-        $unreadResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $this->token])
+        $unreadResponse = $this->withHeaders(['Authorization' => 'Bearer '.$this->token])
             ->getJson('/api/v1/notifications?unread_only=true');
 
         $unreadResponse->assertOk()
@@ -178,7 +182,7 @@ class NotificationTest extends TestCase
             ->assertJsonPath('data.0.id', $n1->id);
 
         // 3. Mark notification as read
-        $readResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $this->token])
+        $readResponse = $this->withHeaders(['Authorization' => 'Bearer '.$this->token])
             ->patchJson("/api/v1/notifications/{$n1->id}/read");
 
         $readResponse->assertOk();
@@ -204,7 +208,7 @@ class NotificationTest extends TestCase
             'title' => 'Unread 2',
         ]);
 
-        $response = $this->withHeaders(['Authorization' => 'Bearer ' . $this->token])
+        $response = $this->withHeaders(['Authorization' => 'Bearer '.$this->token])
             ->postJson('/api/v1/notifications/read-all');
 
         $response->assertOk();
@@ -244,9 +248,9 @@ class NotificationTest extends TestCase
             'tags' => [],
         ];
 
-        Cache::put('temp_upload_' . $uploadId, $stagedData, now()->addDay());
+        Cache::put('temp_upload_'.$uploadId, $stagedData, now()->addDay());
 
-        $response = $this->withHeaders(['Authorization' => 'Bearer ' . $this->token])
+        $response = $this->withHeaders(['Authorization' => 'Bearer '.$this->token])
             ->postJson("/api/v1/reports/upload/{$uploadId}/save", [
                 'report_profile_id' => $this->profile->id,
                 'report' => $stagedData['report'],
@@ -283,11 +287,11 @@ class NotificationTest extends TestCase
             OcrStarted::class,
             OcrCompleted::class,
             AiProcessing::class,
-            ReportProcessingCompleted::class
+            ReportProcessingCompleted::class,
         ]);
 
         // Mock AzureBlobService
-        $this->mock(\App\Services\AzureBlobService::class, function ($mock) {
+        $this->mock(AzureBlobService::class, function ($mock) {
             $mock->shouldReceive('uploadFile')
                 ->andReturn([
                     'url' => 'https://amrvblobstorage.blob.core.windows.net/amrv-container/medical_reports/sample.pdf',
@@ -300,7 +304,7 @@ class NotificationTest extends TestCase
         $file = UploadedFile::fake()->create('report.pdf', 500, 'application/pdf');
 
         // 1. Trigger POST /v1/reports
-        $response = $this->withHeaders(['Authorization' => 'Bearer ' . $this->token])
+        $response = $this->withHeaders(['Authorization' => 'Bearer '.$this->token])
             ->postJson('/api/v1/reports', [
                 'report_profile_id' => $this->profile->id,
                 'title' => 'Monthly Checkup Report',
@@ -316,7 +320,7 @@ class NotificationTest extends TestCase
         // Assert report exists in database with UPLOADED status
         $this->assertDatabaseHas('medical_reports', [
             'id' => $reportId,
-            'status' => \App\Enums\ReportStatus::UPLOADED->value,
+            'status' => ReportStatus::UPLOADED->value,
             'file_url' => 'https://amrvblobstorage.blob.core.windows.net/amrv-container/medical_reports/sample.pdf',
         ]);
 
@@ -345,7 +349,7 @@ class NotificationTest extends TestCase
                     'entity_name' => 'Systolic Blood Pressure',
                     'value' => '120',
                     'unit' => 'mmHg',
-                ]
+                ],
             ],
         ]);
 
@@ -355,7 +359,7 @@ class NotificationTest extends TestCase
         // Assert report status updated to COMPLETED in database
         $this->assertDatabaseHas('medical_reports', [
             'id' => $reportId,
-            'status' => \App\Enums\ReportStatus::COMPLETED->value,
+            'status' => ReportStatus::COMPLETED->value,
         ]);
 
         // Assert knowledge was stored
@@ -400,7 +404,7 @@ class NotificationTest extends TestCase
      */
     public function test_download_report_file(): void
     {
-        $category = \App\Models\ReportCategory::create([
+        $category = ReportCategory::create([
             'name' => 'Blood Test',
             'slug' => 'blood-test',
         ]);
@@ -412,27 +416,20 @@ class NotificationTest extends TestCase
             'report_type' => 'pdf',
             'file_url' => 'https://amrvblobstorage.blob.core.windows.net/amrv-container/medical_reports/secure.pdf',
             'file_hash' => 'hash123',
-            'status' => \App\Enums\ReportStatus::COMPLETED,
+            'status' => ReportStatus::COMPLETED,
         ]);
 
-        $this->mock(\App\Services\AzureBlobService::class, function ($mock) {
-            $mock->shouldReceive('getFile')
+        $this->mock(AzureBlobService::class, function ($mock) {
+            $mock->shouldReceive('generateSasUrl')
                 ->with('medical_reports/secure.pdf')
                 ->once()
-                ->andReturn([
-                    'content' => 'fake-pdf-content-stream-bytes',
-                    'mime_type' => 'application/pdf',
-                ]);
+                ->andReturn('https://fake-sas-url.com/secure.pdf');
         });
 
-        $response = $this->withHeaders(['Authorization' => 'Bearer ' . $this->token])
+        $response = $this->withHeaders(['Authorization' => 'Bearer '.$this->token])
             ->get("/api/v1/reports/{$report->id}/file");
 
-        $response->assertStatus(200)
-            ->assertHeader('Content-Type', 'application/pdf')
-            ->assertHeader('Content-Disposition', 'inline; filename="secure.pdf"');
-
-        $this->assertEquals('fake-pdf-content-stream-bytes', $response->getContent());
+        $response->assertRedirect('https://fake-sas-url.com/secure.pdf');
     }
 
     /**
@@ -440,7 +437,7 @@ class NotificationTest extends TestCase
      */
     public function test_download_report_file_using_query_token(): void
     {
-        $category = \App\Models\ReportCategory::create([
+        $category = ReportCategory::create([
             'name' => 'Blood Test Query',
             'slug' => 'blood-test-query',
         ]);
@@ -452,26 +449,19 @@ class NotificationTest extends TestCase
             'report_type' => 'pdf',
             'file_url' => 'https://amrvblobstorage.blob.core.windows.net/amrv-container/medical_reports/secure_query.pdf',
             'file_hash' => 'hash123_query',
-            'status' => \App\Enums\ReportStatus::COMPLETED,
+            'status' => ReportStatus::COMPLETED,
         ]);
 
-        $this->mock(\App\Services\AzureBlobService::class, function ($mock) {
-            $mock->shouldReceive('getFile')
+        $this->mock(AzureBlobService::class, function ($mock) {
+            $mock->shouldReceive('generateSasUrl')
                 ->with('medical_reports/secure_query.pdf')
                 ->once()
-                ->andReturn([
-                    'content' => 'fake-query-pdf-content-stream-bytes',
-                    'mime_type' => 'application/pdf',
-                ]);
+                ->andReturn('https://fake-sas-url.com/secure_query.pdf');
         });
 
         // Make request without Authorization header but passing ?token= query parameter
-        $response = $this->get("/api/v1/reports/{$report->id}/file?token=" . $this->token);
+        $response = $this->get("/api/v1/reports/{$report->id}/file?token=".$this->token);
 
-        $response->assertStatus(200)
-            ->assertHeader('Content-Type', 'application/pdf')
-            ->assertHeader('Content-Disposition', 'inline; filename="secure_query.pdf"');
-
-        $this->assertEquals('fake-query-pdf-content-stream-bytes', $response->getContent());
+        $response->assertRedirect('https://fake-sas-url.com/secure_query.pdf');
     }
 }

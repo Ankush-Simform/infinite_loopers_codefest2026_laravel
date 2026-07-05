@@ -1,19 +1,21 @@
 <?php
 
 use App\Http\Controllers\Api\V1\Auth\AuthController;
+use App\Http\Controllers\Api\V1\Chat\ChatController;
+use App\Http\Controllers\Api\V1\Devices\DeviceController;
+use App\Http\Controllers\Api\V1\Home\HomeController;
+use App\Http\Controllers\Api\V1\Notifications\NotificationController;
 use App\Http\Controllers\Api\V1\User\UserController;
 use App\Http\Controllers\Api\V1\Profile\ReportProfileController;
-use App\Http\Controllers\Api\V1\Reports\ReportController;
 use App\Http\Controllers\Api\V1\Reports\ReportCategoryController;
+use App\Http\Controllers\Api\V1\Reports\ReportController;
 use App\Http\Controllers\Api\V1\Reports\ReportUploadController;
-use App\Http\Controllers\Api\V1\Chat\ChatController;
-use App\Http\Controllers\Api\V1\Home\HomeController;
-use App\Http\Controllers\Api\V1\Timeline\TimelineController;
-use App\Http\Controllers\Api\V1\System\StatusController;
-use App\Http\Controllers\Api\V1\Devices\DeviceController;
-use App\Http\Controllers\Api\V1\Notifications\NotificationController;
 use App\Http\Controllers\Api\V1\Reports\WebhookController;
+use App\Http\Controllers\Api\V1\System\StatusController;
+use App\Http\Controllers\Api\V1\Timeline\TimelineController;
+use App\Support\ApiResponse;
 use Illuminate\Support\Facades\Route;
+use Symfony\Component\HttpFoundation\Response;
 
 Route::get('status', StatusController::class)->name('api.status');
 
@@ -21,7 +23,7 @@ Route::post('webhooks/report-processing-complete', [WebhookController::class, 'h
     ->name('api.webhooks.report_processing_complete');
 
 Route::get('login', function () {
-    return \App\Support\ApiResponse::error('Unauthenticated.', \Symfony\Component\HttpFoundation\Response::HTTP_UNAUTHORIZED);
+    return ApiResponse::error('Unauthenticated.', Response::HTTP_UNAUTHORIZED);
 })->name('login');
 
 Route::get('v1/auth/email/verify/{id}/{hash}', [AuthController::class, 'verifyEmail'])
@@ -74,6 +76,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::post('reports/upload', [ReportUploadController::class, 'upload'])->name('reports.upload');
         Route::get('reports/upload/{upload_id}/status', [ReportUploadController::class, 'status'])->name('reports.upload.status');
         Route::get('reports/upload/{upload_id}/review', [ReportUploadController::class, 'review'])->name('reports.upload.review');
+        Route::get('reports/upload/{upload_id}/file', [ReportUploadController::class, 'showFile'])->name('reports.upload.file');
         Route::post('reports/upload/{upload_id}/save', [ReportUploadController::class, 'save'])->name('reports.upload.save');
 
         // Timelines API
@@ -90,6 +93,7 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::get('chats/{id}/messages', [ChatController::class, 'messages'])->name('chats.messages');
         Route::post('chats/{id}/messages', [ChatController::class, 'sendMessage'])->name('chats.send_message');
         Route::delete('chats/{id}', [ChatController::class, 'destroy'])->name('chats.destroy');
+        Route::get('chats/attachments/{id}', [ChatController::class, 'showAttachment'])->name('chats.attachments.show');
 
         // Notifications API
         Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');

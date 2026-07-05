@@ -4,41 +4,43 @@ declare(strict_types=1);
 
 namespace App\Events;
 
+use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class OcrStarted implements ShouldBroadcast
+class ChatMessageStreamed implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
+    /**
+     * Create a new event instance.
+     */
     public function __construct(
-        public readonly string $reportId,
-        public readonly string $userId
+        public int $sessionId,
+        public string $content,
+        public string $role = 'assistant'
     ) {}
 
     /**
      * Get the channels the event should broadcast on.
+     *
+     * @return array<int, Channel>
      */
     public function broadcastOn(): array
     {
         return [
-            new PrivateChannel('reports.'.$this->userId),
-            new PrivateChannel('user.'.$this->userId),
+            new PrivateChannel('chat.'.$this->sessionId),
         ];
     }
 
     /**
-     * Get the data to broadcast.
+     * The event's broadcast name.
      */
-    public function broadcastWith(): array
+    public function broadcastAs(): string
     {
-        return [
-            'report_id' => $this->reportId,
-            'status' => 'processing',
-            'stage' => 'ocr_started',
-        ];
+        return 'message.streamed';
     }
 }

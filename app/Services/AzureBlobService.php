@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use GuzzleHttp\Client;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
 use MicrosoftAzure\Storage\Blob\BlobRestProxy;
@@ -13,7 +14,9 @@ use MicrosoftAzure\Storage\Common\Exceptions\ServiceException;
 class AzureBlobService
 {
     protected string $accountName;
+
     protected string $containerName;
+
     protected string $accountKey;
     protected BlobRestProxy $client;
 
@@ -65,11 +68,10 @@ class AzureBlobService
     /**
      * Upload a file to Azure Blob Storage using the Azure Storage SDK.
      *
-     * @param UploadedFile $file
-     * @param string $folder
      * @param array<string, mixed> $metadata Extra metadata stored alongside the blob (e.g. user_id, report_id).
      * @param string|null $filename Custom blob filename without extension; defaults to a generated unique name.
      * @return array{url: string, public_id: string, format: string, bytes: int}
+     *
      * @throws \Exception
      */
     public function uploadFile(UploadedFile $file, string $folder = 'amrv', array $metadata = [], ?string $filename = null): array
@@ -110,15 +112,12 @@ class AzureBlobService
                 'file_name' => $file->getClientOriginalName(),
             ]);
 
-            throw new \Exception('Failed to upload file to Azure storage: ' . $e->getMessage());
+            throw new \Exception('Failed to upload file to Azure storage: '.$e->getMessage());
         }
     }
 
     /**
      * Delete a file from Azure Blob Storage.
-     *
-     * @param string $blobName
-     * @return bool
      */
     public function deleteFile(string $blobName): bool
     {
@@ -155,8 +154,8 @@ class AzureBlobService
     /**
      * Download / Fetch file content from Azure Blob Storage.
      *
-     * @param string $blobName
      * @return array{content: string, mime_type: string}
+     *
      * @throws \Exception
      */
     public function getFile(string $blobName): array
@@ -174,9 +173,112 @@ class AzureBlobService
                 'blob' => $blobName,
             ]);
 
-            throw new \Exception('Failed to get file from Azure storage: ' . $e->getMessage());
+            throw new \Exception('Failed to get file from Azure storage: '.$e->getMessage());
         }
     }
+
+    /**
+     * Download and stream a file chunk-by-chunk from Azure Blob Storage.
+     *
+     * @throws \Exception
+     */
+    public function downloadStream(string $blobName, callable $callback): void
+    {
+        try {
+            $gmtDate = gmdate('D, d M Y H:i:s \G\M\T');
+
+            $canonicalizedHeaders = 'x-ms-date:'.$gmtDate."\n".
+                                    'x-ms-version:2021-08-06';
+
+            $canonicalizedResource = '/'.$this->accountName.'/'.$this->containerName.'/'.$blobName;
+
+            $stringToSign = "GET\n".               // VERB
+                            "\n".                  // Content-Encoding
+                            "\n".                  // Content-Language
+                            "\n".                  // Content-Length
+                            "\n".                  // Content-MD5
+                            "\n".                  // Content-Type
+                            "\n".                  // Date
+                            "\n".                  // If-Modified-Since
+                            "\n".                  // If-Unmodified-Since
+                            "\n".                  // If-Match
+                            "\n".                  // If-None-Match
+                            "\n".                  // Range
+                            $canonicalizedHeaders."\n".
+                            $canonicalizedResource;
+
+            $decodedKey = base64_decode($this->accountKey);
+            $signature = base64_encode(hash_hmac('sha256', $stringToSign, $decodedKey, true));
+
+            $url = "https://{$this->accountName}.blob.core.windows.net/{$this->containerName}/{$blobName}";
+
+            $guzzle = new Client;
+            $response = $guzzle->get($url, [
+                'headers' => [
+                    'Authorization' => "SharedKey {$this->accountName}:{$signature}",
+                    'x-ms-date' => $gmtDate,
+                    'x-ms-version' => '2021-08-06',
+                ],
+                'stream' => true,
+            ]);
+
+            $body = $response->getBody();
+            while (! $body->eof()) {
+                $chunk = $body->read(8192); // Read in 8KB chunks
+                if ($chunk !== '') {
+                    $callback($chunk);
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::error('Azure Blob Service Exception during downloadStream', [
+                'error' => $e->getMessage(),
+                'blob' => $blobName,
+            ]);
+            throw new \Exception('Failed to download stream from Azure storage: '.$e->getMessage());
+        }
+    }
+
+    /**
+     * Generate a Shared Access Signature (SAS) URL for a blob.
+     */
+    public function generateSasUrl(string $blobName, int $expiryMinutes = 15): string
+    {
+        $expiry = gmdate('Y-m-d\TH:i:s\Z', time() + ($expiryMinutes * 60));
+
+        $stringToSign = implode("\n", [
+            'r', // sp
+            '',  // st
+            $expiry, // se
+            "/blob/{$this->accountName}/{$this->containerName}/{$blobName}", // canonicalizedresource
+            '', // si
+            '', // sip
+            'https', // spr
+            '2021-08-06', // sv
+            'b', // sr
+            '', // snapshot
+            '', // signedencryptionscope
+            '', // rscc
+            '', // rscd
+            '', // rsce
+            '', // rscl
+            '',  // rsct
+        ]);
+
+        $decodedKey = base64_decode($this->accountKey);
+        $signature = base64_encode(hash_hmac('sha256', $stringToSign, $decodedKey, true));
+
+        $queryParams = http_build_query([
+            'sp' => 'r',
+            'se' => $expiry,
+            'spr' => 'https',
+            'sv' => '2021-08-06',
+            'sr' => 'b',
+            'sig' => $signature,
+        ]);
+
+        return "https://{$this->accountName}.blob.core.windows.net/{$this->containerName}/{$blobName}?{$queryParams}";
+    }
+
 
     /**
      * Azure blob metadata keys must be valid C#-style identifiers (letters, digits, underscore,
