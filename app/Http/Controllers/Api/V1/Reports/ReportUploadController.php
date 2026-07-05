@@ -48,12 +48,12 @@ final class ReportUploadController extends Controller
             // Check duplicate in database
             $duplicate = MedicalReport::where('file_hash', $fileHash)->first();
 
-            // if ($duplicate) {
-            //     Log::warning('Duplicate file upload attempted during staging', [
-            //         'file_hash' => $fileHash,
-            //     ]);
-            //     return ApiResponse::error('This file has already been uploaded.', Response::HTTP_CONFLICT);
-            // }
+            if ($duplicate) {
+                Log::warning('Duplicate file upload attempted during staging', [
+                    'file_hash' => $fileHash,
+                ]);
+                return ApiResponse::error('This file has already been uploaded.', Response::HTTP_CONFLICT);
+            }
 
             $originalFilename = $file->getClientOriginalName();
 
