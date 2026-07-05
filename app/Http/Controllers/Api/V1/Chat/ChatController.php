@@ -243,9 +243,17 @@ final class ChatController extends Controller
                 // Save final assistant response in DB
                 if (trim($accumulatedResponse) !== '') {
                     try {
+                        $contentToSave = $accumulatedResponse;
+                        $decoded = json_decode($accumulatedResponse, true);
+                        if (is_array($decoded) && isset($decoded['data']['response_text'])) {
+                            $contentToSave = $decoded['data']['response_text'];
+                        } elseif (is_array($decoded) && isset($decoded['message'])) {
+                            $contentToSave = $decoded['message'];
+                        }
+
                         $session->messages()->create([
                             'role' => ChatMessageRole::ASSISTANT,
-                            'content' => $accumulatedResponse,
+                            'content' => $contentToSave,
                         ]);
                         $session->update(['last_message_at' => now()]);
                     } catch (\Throwable $e) {

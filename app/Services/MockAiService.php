@@ -51,9 +51,6 @@ final class MockAiService implements AiServiceContract
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     }
 
-    /**
-     * Stream an AI chat response.
-     */
     public function streamChatResponse(
         int $userId,
         int $sessionId,
@@ -74,12 +71,29 @@ final class MockAiService implements AiServiceContract
         }
 
         $fullResponse = $this->generateChatResponse($message, $history, $reportUrl);
+        $messageText = $fullResponse;
+        
+        $decoded = json_decode($fullResponse, true);
+        if (is_array($decoded) && isset($decoded['message'])) {
+            $messageText = $decoded['message'];
+        }
+
+        $jsonPayload = json_encode([
+            'status' => true,
+            'message' => 'success',
+            'code' => 200,
+            'data' => [
+                'user_id' => $userId,
+                'session_id' => 'session_' . $sessionId,
+                'response_text' => $messageText
+            ]
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
         // Split response into small chunks to simulate streaming of the JSON string
-        $length = strlen($fullResponse);
+        $length = strlen($jsonPayload);
         $chunkSize = 8;
         for ($i = 0; $i < $length; $i += $chunkSize) {
-            $chunk = substr($fullResponse, $i, $chunkSize);
+            $chunk = substr($jsonPayload, $i, $chunkSize);
             $callback($chunk);
             usleep(15000); // 15ms sleep between chunks
         }
