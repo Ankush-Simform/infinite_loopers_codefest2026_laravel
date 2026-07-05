@@ -7,6 +7,7 @@ use App\Models\Traits\GeneratesPrimaryKey;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ChatMessage extends Model
@@ -43,5 +44,10 @@ class ChatMessage extends Model
     public function report(): BelongsTo
     {
         return $this->belongsTo(MedicalReport::class, 'report_id');
+    }
+
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(ChatAttachment::class, 'chat_message_id');
     }
 }

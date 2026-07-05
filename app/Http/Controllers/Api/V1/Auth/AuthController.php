@@ -77,6 +77,7 @@ final class AuthController extends Controller
 
             if (! $user || ! Hash::check($request->password, $user->password)) {
                 Log::warning('Login failed: Invalid credentials', ['email' => $request->email]);
+
                 return ApiResponse::error('Invalid credentials.', Response::HTTP_UNAUTHORIZED);
             }
 
@@ -115,11 +116,13 @@ final class AuthController extends Controller
                     'payload_aud' => $payload['aud'] ?? null,
                     'config_client_id' => $clientId,
                 ]);
+
                 return ApiResponse::error('Unable to verify Google login.', Response::HTTP_UNAUTHORIZED);
             }
 
             if (empty($payload['email'])) {
                 Log::warning('Google login failed: Payload missing email address');
+
                 return ApiResponse::error('Google account does not contain an email address.', Response::HTTP_UNAUTHORIZED);
             }
 
@@ -284,6 +287,7 @@ final class AuthController extends Controller
 
             if ($user->hasVerifiedEmail()) {
                 Log::warning('Resend verification failed: Email already verified', ['user_id' => $user->id]);
+
                 return ApiResponse::error('Email is already verified.', Response::HTTP_BAD_REQUEST);
             }
 
@@ -359,11 +363,13 @@ final class AuthController extends Controller
 
             if (! hash_equals((string) $hash, sha1($user->getEmailForVerification()))) {
                 Log::warning('Email verification failed: Invalid hash', ['user_id' => $id]);
+
                 return ApiResponse::error('Invalid verification link.', Response::HTTP_FORBIDDEN);
             }
 
             if ($user->hasVerifiedEmail()) {
                 Log::info('Email verification skipped: Already verified', ['user_id' => $id]);
+
                 return ApiResponse::success(message: 'Email already verified.');
             }
 
@@ -387,11 +393,12 @@ final class AuthController extends Controller
     {
         if (app()->environment('local', 'testing') && str_starts_with($idToken, 'mock_token_')) {
             $userKey = substr($idToken, 11) ?: 'user';
+
             return [
                 'aud' => config('services.google.client_id') ?: 'mock-client-id',
-                'sub' => 'mock_google_id_' . $userKey,
-                'email' => $userKey . '@example.com',
-                'name' => 'Mock Google User ' . ucfirst($userKey),
+                'sub' => 'mock_google_id_'.$userKey,
+                'email' => $userKey.'@example.com',
+                'name' => 'Mock Google User '.ucfirst($userKey),
             ];
         }
 
@@ -407,6 +414,7 @@ final class AuthController extends Controller
             return $response->json();
         } catch (\Throwable $exception) {
             Log::warning('Google token validation failed.', ['message' => $exception->getMessage()]);
+
             return null;
         }
     }

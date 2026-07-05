@@ -29,18 +29,18 @@ final class JwtAuthenticate
             $token = $request->query('token');
         }
 
-        if (!$token) {
+        if (! $token) {
             return ApiResponse::error('Unauthenticated.', Response::HTTP_UNAUTHORIZED);
         }
 
         $payload = $this->jwtService->validateToken($token);
 
-        if (!$payload || !isset($payload['sub'])) {
+        if (! $payload || ! isset($payload['sub'])) {
             return ApiResponse::error('Unauthenticated.', Response::HTTP_UNAUTHORIZED);
         }
 
         $user = User::find($payload['sub']);
-        if (!$user) {
+        if (! $user) {
             return ApiResponse::error('Unauthenticated.', Response::HTTP_UNAUTHORIZED);
         }
 
