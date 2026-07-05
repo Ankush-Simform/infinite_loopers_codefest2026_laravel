@@ -5,14 +5,22 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Models\User;
-use App\Models\Profile;
+use App\Models\ReportProfile;
 use App\Models\UserDevice;
 use App\Models\Notification;
 use App\Models\MedicalReport;
 use App\Jobs\SendPushNotificationJob;
+use App\Jobs\ProcessMedicalReportJob;
+use App\Events\ReportUploaded;
+use App\Events\OcrStarted;
+use App\Events\OcrCompleted;
+use App\Events\AiProcessing;
+use App\Events\ReportProcessingCompleted;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Event;
 use Tests\TestCase;
 
 class NotificationTest extends TestCase
@@ -21,7 +29,7 @@ class NotificationTest extends TestCase
 
     protected User $user;
     protected string $token;
-    protected Profile $profile;
+    protected ReportProfile $profile;
 
     protected function setUp(): void
     {
@@ -35,7 +43,7 @@ class NotificationTest extends TestCase
             'email_verified_at' => now(),
         ]);
 
-        $this->profile = $this->user->profiles()->create([
+        $this->profile = $this->user->reportProfiles()->create([
             'name' => 'John Doe',
             'relation' => 'self',
         ]);
@@ -215,8 +223,8 @@ class NotificationTest extends TestCase
         $uploadId = 'test-staged-upload-uuid';
         $stagedData = [
             'created_at' => now()->timestamp,
-            'profile_id' => $this->profile->id,
-            'file_url' => 'https://res.cloudinary.com/demo/image/upload/v1570975200/sample.pdf',
+            'report_profile_id' => $this->profile->id,
+            'file_url' => 'https://amrvblobstorage.blob.core.windows.net/amrv-container/staging/sample.pdf',
             'file_hash' => 'dummy_hash',
             'report_type' => 'pdf',
             'report' => [
@@ -240,7 +248,7 @@ class NotificationTest extends TestCase
 
         $response = $this->withHeaders(['Authorization' => 'Bearer ' . $this->token])
             ->postJson("/api/v1/reports/upload/{$uploadId}/save", [
-                'profile_id' => $this->profile->id,
+                'report_profile_id' => $this->profile->id,
                 'report' => $stagedData['report'],
                 'entities' => [],
                 'tags' => [],
@@ -262,5 +270,208 @@ class NotificationTest extends TestCase
         Queue::assertPushed(SendPushNotificationJob::class, function ($job) use ($notification) {
             return $job->notification->id === $notification->id;
         });
+    }
+
+    /**
+     * Test the full asynchronous report processing flow (WebSockets, Queues, Webhooks).
+     */
+    public function test_asynchronous_report_processing_flow(): void
+    {
+        Queue::fake([ProcessMedicalReportJob::class, SendPushNotificationJob::class]);
+        Event::fake([
+            ReportUploaded::class,
+            OcrStarted::class,
+            OcrCompleted::class,
+            AiProcessing::class,
+            ReportProcessingCompleted::class
+        ]);
+
+        // Mock AzureBlobService
+        $this->mock(\App\Services\AzureBlobService::class, function ($mock) {
+            $mock->shouldReceive('uploadFile')
+                ->andReturn([
+                    'url' => 'https://amrvblobstorage.blob.core.windows.net/amrv-container/medical_reports/sample.pdf',
+                    'public_id' => 'medical_reports/sample.pdf',
+                    'format' => 'pdf',
+                    'bytes' => 500000,
+                ]);
+        });
+
+        $file = UploadedFile::fake()->create('report.pdf', 500, 'application/pdf');
+
+        // 1. Trigger POST /v1/reports
+        $response = $this->withHeaders(['Authorization' => 'Bearer ' . $this->token])
+            ->postJson('/api/v1/reports', [
+                'report_profile_id' => $this->profile->id,
+                'title' => 'Monthly Checkup Report',
+                'file' => $file,
+            ]);
+
+        $response->assertStatus(201)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('status', 'uploaded');
+
+        $reportId = $response->json('report_id');
+
+        // Assert report exists in database with UPLOADED status
+        $this->assertDatabaseHas('medical_reports', [
+            'id' => $reportId,
+            'status' => \App\Enums\ReportStatus::UPLOADED->value,
+            'file_url' => 'https://amrvblobstorage.blob.core.windows.net/amrv-container/medical_reports/sample.pdf',
+        ]);
+
+        // Assert ReportUploaded event was broadcasted
+        Event::assertDispatched(ReportUploaded::class, function ($event) use ($reportId) {
+            return $event->report->id === $reportId;
+        });
+
+        // Assert ProcessMedicalReportJob was queued
+        Queue::assertPushed(ProcessMedicalReportJob::class, function ($job) use ($reportId) {
+            return $job->reportId === $reportId;
+        });
+
+        // 2. Simulate Webhook call from the ML service
+        $webhookResponse = $this->postJson('/api/webhooks/report-processing-complete', [
+            'report_id' => $reportId,
+            'summary' => 'This is a complete AI generated summary of the report.',
+            'report_type' => 'blood_test',
+            'extracted_text' => 'Some raw extracted ocr text.',
+            'risk_level' => 'Low',
+            'confidence_score' => 95.5,
+            'recommendations' => ['Drink more water', 'Schedule follow up'],
+            'medical_entities' => [
+                [
+                    'entity_type' => 'vital',
+                    'entity_name' => 'Systolic Blood Pressure',
+                    'value' => '120',
+                    'unit' => 'mmHg',
+                ]
+            ],
+        ]);
+
+        $webhookResponse->assertOk()
+            ->assertJsonPath('success', true);
+
+        // Assert report status updated to COMPLETED in database
+        $this->assertDatabaseHas('medical_reports', [
+            'id' => $reportId,
+            'status' => \App\Enums\ReportStatus::COMPLETED->value,
+        ]);
+
+        // Assert knowledge was stored
+        $this->assertDatabaseHas('medical_knowledge', [
+            'report_id' => $reportId,
+            'summary' => 'This is a complete AI generated summary of the report.',
+            'risk_level' => 'Low',
+        ]);
+
+        // Assert entities were stored
+        $this->assertDatabaseHas('medical_entities', [
+            'report_id' => $reportId,
+            'entity_name' => 'Systolic Blood Pressure',
+            'value' => '120',
+        ]);
+
+        // Assert ReportProcessingCompleted event was broadcasted
+        Event::assertDispatched(ReportProcessingCompleted::class, function ($event) use ($reportId) {
+            return $event->report->id === $reportId;
+        });
+
+        // Assert Notification record is created in database
+        $this->assertDatabaseHas('notifications', [
+            'user_id' => $this->user->id,
+            'type' => 'report_processed',
+            'title' => 'Medical Report Processed',
+        ]);
+
+        $notification = Notification::where('user_id', $this->user->id)
+            ->where('type', 'report_processed')
+            ->first();
+        $this->assertNotNull($notification);
+
+        // Assert Push Notification Job is dispatched
+        Queue::assertPushed(SendPushNotificationJob::class, function ($job) use ($notification) {
+            return $job->notification->id === $notification->id;
+        });
+    }
+
+    /**
+     * Test secure report file proxy download.
+     */
+    public function test_download_report_file(): void
+    {
+        $category = \App\Models\ReportCategory::create([
+            'name' => 'Blood Test',
+            'slug' => 'blood-test',
+        ]);
+
+        $report = MedicalReport::create([
+            'report_profile_id' => $this->profile->id,
+            'report_category_id' => $category->id,
+            'title' => 'Secure Blood Report',
+            'report_type' => 'pdf',
+            'file_url' => 'https://amrvblobstorage.blob.core.windows.net/amrv-container/medical_reports/secure.pdf',
+            'file_hash' => 'hash123',
+            'status' => \App\Enums\ReportStatus::COMPLETED,
+        ]);
+
+        $this->mock(\App\Services\AzureBlobService::class, function ($mock) {
+            $mock->shouldReceive('getFile')
+                ->with('medical_reports/secure.pdf')
+                ->once()
+                ->andReturn([
+                    'content' => 'fake-pdf-content-stream-bytes',
+                    'mime_type' => 'application/pdf',
+                ]);
+        });
+
+        $response = $this->withHeaders(['Authorization' => 'Bearer ' . $this->token])
+            ->get("/api/v1/reports/{$report->id}/file");
+
+        $response->assertStatus(200)
+            ->assertHeader('Content-Type', 'application/pdf')
+            ->assertHeader('Content-Disposition', 'inline; filename="secure.pdf"');
+
+        $this->assertEquals('fake-pdf-content-stream-bytes', $response->getContent());
+    }
+
+    /**
+     * Test secure report file proxy download using token in query parameter.
+     */
+    public function test_download_report_file_using_query_token(): void
+    {
+        $category = \App\Models\ReportCategory::create([
+            'name' => 'Blood Test Query',
+            'slug' => 'blood-test-query',
+        ]);
+
+        $report = MedicalReport::create([
+            'report_profile_id' => $this->profile->id,
+            'report_category_id' => $category->id,
+            'title' => 'Query Token Blood Report',
+            'report_type' => 'pdf',
+            'file_url' => 'https://amrvblobstorage.blob.core.windows.net/amrv-container/medical_reports/secure_query.pdf',
+            'file_hash' => 'hash123_query',
+            'status' => \App\Enums\ReportStatus::COMPLETED,
+        ]);
+
+        $this->mock(\App\Services\AzureBlobService::class, function ($mock) {
+            $mock->shouldReceive('getFile')
+                ->with('medical_reports/secure_query.pdf')
+                ->once()
+                ->andReturn([
+                    'content' => 'fake-query-pdf-content-stream-bytes',
+                    'mime_type' => 'application/pdf',
+                ]);
+        });
+
+        // Make request without Authorization header but passing ?token= query parameter
+        $response = $this->get("/api/v1/reports/{$report->id}/file?token=" . $this->token);
+
+        $response->assertStatus(200)
+            ->assertHeader('Content-Type', 'application/pdf')
+            ->assertHeader('Content-Disposition', 'inline; filename="secure_query.pdf"');
+
+        $this->assertEquals('fake-query-pdf-content-stream-bytes', $response->getContent());
     }
 }

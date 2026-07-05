@@ -285,7 +285,8 @@
       },
       "post": {
         "tags": ["4. Medical Reports"],
-        "summary": "Direct Upload a medical report (Legacy/Instant)",
+        "summary": "Asynchronously Upload a medical report",
+        "description": "Uploads report document to Azure Storage, triggers background AI processing queue job, broadcasts progress events over WebSockets (reports.{user_id}), and returns immediate upload status.",
         "requestBody": {
           "required": true,
           "content": {
@@ -307,7 +308,21 @@
           }
         },
         "responses": {
-          "201": { "description": "Medical report uploaded and timeline log created." }
+          "201": {
+            "description": "Medical report uploaded successfully and queued for processing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "report_id": { "type": "integer", "example": 15 },
+                    "status": { "type": "string", "example": "uploaded" }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -315,7 +330,7 @@
       "post": {
         "tags": ["4. Medical Reports"],
         "summary": "Stage 1: Upload file to Staging (Review Flow)",
-        "description": "Uploads report document to Cloudinary and registers a temporary staged record.",
+        "description": "Uploads report document to Azure Storage and registers a temporary staged record.",
         "requestBody": {
           "required": true,
           "content": {
@@ -496,7 +511,7 @@
           }
         },
         "responses": {
-          "200": { "description": "Report updated and file replaced on Cloudinary." }
+          "200": { "description": "Report updated and file replaced on Azure Storage." }
         }
       },
       "delete": {
@@ -506,7 +521,27 @@
           { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
         ],
         "responses": {
-          "200": { "description": "Report deleted successfully (cleared from Cloudinary)." }
+          "200": { "description": "Report deleted successfully (cleared from Azure Storage)." }
+        }
+      }
+    },
+    "/reports/{id}/file": {
+      "get": {
+        "tags": ["4. Medical Reports"],
+        "summary": "Securely stream/download medical report file",
+        "description": "Validates report ownership, retrieves the private file from Azure Blob Storage, and streams the binary content directly inline to the authenticated user.",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Binary file content streamed inline.",
+            "headers": {
+              "Content-Type": { "schema": { "type": "string", "example": "application/pdf" } },
+              "Content-Disposition": { "schema": { "type": "string", "example": "inline; filename=\"report.pdf\"" } }
+            }
+          },
+          "404": { "description": "Medical report file not found or access denied." }
         }
       }
     },
@@ -778,6 +813,53 @@
         },
         "responses": {
           "200": { "description": "Device token de-registered successfully." }
+        }
+      }
+    },
+    "/../webhooks/report-processing-complete": {
+      "post": {
+        "tags": ["9. Webhooks"],
+        "summary": "ML Service Webhook callback to complete report processing",
+        "description": "Receives processed AI analysis payload from the ML service, updates database schemas, logs events, dispatches mobile push/in-app notifications, and broadcasts complete event to reports WebSocket channel.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["report_id", "summary", "report_type", "risk_level"],
+                "properties": {
+                  "report_id": { "type": "integer", "example": 15 },
+                  "summary": { "type": "string", "example": "This report presents general vitals and blood values. Most parameters including blood sugar and triglycerides are within normal ranges." },
+                  "report_type": { "type": "string", "example": "blood_test" },
+                  "extracted_text": { "type": "string", "example": "AMRV MEDICAL ANALYSIS LABS..." },
+                  "risk_level": { "type": "string", "example": "Low" },
+                  "confidence_score": { "type": "number", "example": 97.8 },
+                  "recommendations": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "example": ["Continue regular hydration.", "Schedule follow-up check in 6 months."]
+                  },
+                  "medical_entities": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "entity_type": { "type": "string", "example": "vital" },
+                        "entity_name": { "type": "string", "example": "Systolic Blood Pressure" },
+                        "value": { "type": "string", "example": "120" },
+                        "unit": { "type": "string", "example": "mmHg" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Webhook processed successfully." }
         }
       }
     }

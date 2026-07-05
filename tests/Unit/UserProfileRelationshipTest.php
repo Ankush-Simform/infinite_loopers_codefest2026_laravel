@@ -2,7 +2,7 @@
 
 namespace Tests\Unit;
 
-use App\Models\Profile;
+use App\Models\ReportProfile;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -18,9 +18,10 @@ class UserProfileRelationshipTest extends TestCase
         $profile = $user->profile()->create([
             'user_id' => $user->id,
             'name' => 'Jane Doe',
+            'relation' => \App\Enums\ProfileRelation::SELF->value,
         ]);
 
-        $this->assertInstanceOf(Profile::class, $user->profile);
+        $this->assertInstanceOf(ReportProfile::class, $user->profile);
         $this->assertSame($profile->id, $user->profile->id);
     }
 }

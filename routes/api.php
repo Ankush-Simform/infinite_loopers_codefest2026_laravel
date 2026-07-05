@@ -1,7 +1,8 @@
 <?php
 
 use App\Http\Controllers\Api\V1\Auth\AuthController;
-use App\Http\Controllers\Api\V1\Profile\ProfileController;
+use App\Http\Controllers\Api\V1\User\UserController;
+use App\Http\Controllers\Api\V1\Profile\ReportProfileController;
 use App\Http\Controllers\Api\V1\Reports\ReportController;
 use App\Http\Controllers\Api\V1\Reports\ReportCategoryController;
 use App\Http\Controllers\Api\V1\Reports\ReportUploadController;
@@ -11,9 +12,13 @@ use App\Http\Controllers\Api\V1\Timeline\TimelineController;
 use App\Http\Controllers\Api\V1\System\StatusController;
 use App\Http\Controllers\Api\V1\Devices\DeviceController;
 use App\Http\Controllers\Api\V1\Notifications\NotificationController;
+use App\Http\Controllers\Api\V1\Reports\WebhookController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('status', StatusController::class)->name('api.status');
+
+Route::post('webhooks/report-processing-complete', [WebhookController::class, 'handle'])
+    ->name('api.webhooks.report_processing_complete');
 
 Route::get('login', function () {
     return \App\Support\ApiResponse::error('Unauthenticated.', \Symfony\Component\HttpFoundation\Response::HTTP_UNAUTHORIZED);
@@ -30,11 +35,14 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         Route::post('register', [AuthController::class, 'register'])->name('register');
         Route::post('login', [AuthController::class, 'login'])->name('login');
         Route::post('google', [AuthController::class, 'google'])->name('google');
+        Route::post('email/verify', [AuthController::class, 'verifyEmailToken'])->name('verification.verify_token');
+        Route::post('email/resend', [AuthController::class, 'resendVerifica
+        tion'])->name('verification.resend');
 
         Route::middleware('auth.jwt')->group(function (): void {
             Route::get('me', [AuthController::class, 'me'])->name('me');
+            Route::put('me', [AuthController::class, 'updateMe'])->name('me.update');
             Route::post('logout', [AuthController::class, 'logout'])->name('logout');
-            Route::post('email/resend', [AuthController::class, 'resendVerification'])->name('verification.resend');
         });
     });
 
@@ -42,16 +50,23 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // Home Dashboard API
         Route::get('home', HomeController::class)->name('home');
 
-        // Profile API (Plural profiles resources + singular fallback showSelf)
-        Route::get('profile', [ProfileController::class, 'showSelf'])->name('profile.show');
-        Route::put('profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
-        Route::apiResource('profiles', ProfileController::class);
+        // User Profile API
+        Route::get('user', [UserController::class, 'show'])->name('user.show');
+        Route::patch('user', [UserController::class, 'update'])->name('user.update');
+        Route::post('user', [UserController::class, 'update'])->name('user.post_update');
+        Route::put('user/password', [UserController::class, 'updatePassword'])->name('user.password.update');
+        Route::put('profile/password', [UserController::class, 'updatePassword'])->name('profile.password.update');
+
+        // Report Profiles API
+        Route::get('report-profiles/enums', [ReportProfileController::class, 'getEnums'])->name('report-profiles.enums');
+        Route::apiResource('report-profiles', ReportProfileController::class);
 
         // Reports API
         Route::get('categories', ReportCategoryController::class)->name('categories.index');
         Route::get('reports', [ReportController::class, 'index'])->name('reports.index');
         Route::post('reports', [ReportController::class, 'store'])->name('reports.store');
         Route::get('reports/{id}', [ReportController::class, 'show'])->name('reports.show');
+        Route::get('reports/{id}/file', [ReportController::class, 'showFile'])->name('reports.file');
         Route::put('reports/{id}', [ReportController::class, 'update'])->name('reports.update');
         Route::delete('reports/{id}', [ReportController::class, 'destroy'])->name('reports.destroy');
 

@@ -8,24 +8,24 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class Profile extends Model
+class ReportProfile extends Model
 {
     use HasFactory, SoftDeletes;
 
+    protected $table = 'report_profiles';
+
     protected $fillable = [
         'user_id',
+        'relation',
         'name',
         'email',
-        'relation',
         'blood_group',
         'date_of_birth',
         'gender',
         'height_cm',
         'weight_kg',
-        'tags',
     ];
 
     protected function casts(): array
@@ -52,16 +52,11 @@ class Profile extends Model
 
     public function medicalReports(): HasMany
     {
-        return $this->hasMany(MedicalReport::class);
+        return $this->hasMany(MedicalReport::class, 'report_profile_id');
     }
 
     public function timelineEvents(): HasMany
     {
-        return $this->hasMany(TimelineEvent::class);
-    }
-
-    public function emergencyCard(): HasOne
-    {
-        return $this->hasOne(EmergencyCard::class);
+        return $this->hasMany(TimelineEvent::class, 'report_profile_id');
     }
 }

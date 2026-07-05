@@ -12,7 +12,7 @@ class EmergencyCard extends Model
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
-        'profile_id',
+        'user_id',
         'qr_token',
         'expires_at',
         'last_generated_at',
@@ -32,8 +32,8 @@ class EmergencyCard extends Model
     |--------------------------------------------------------------------------
     */
 
-    public function profile(): BelongsTo
+    public function user(): BelongsTo
     {
-        return $this->belongsTo(Profile::class);
+        return $this->belongsTo(User::class);
     }
 }

@@ -23,6 +23,11 @@ return new class extends Migration
             $table->string('master_key_hash')->nullable();
             $table->string('emergency_contact_name')->nullable();
             $table->string('emergency_contact_phone', 20)->nullable();
+            $table->string('blood_group', 5)->nullable();
+            $table->date('date_of_birth')->nullable();
+            $table->string('gender')->nullable();
+            $table->decimal('height_cm', 5, 2)->nullable();
+            $table->decimal('weight_kg', 5, 2)->nullable();
             $table->rememberToken();
             $table->timestamps();
             $table->softDeletes();

@@ -4,12 +4,16 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api\V1\Auth;
 
+use App\Enums\ProfileRelation;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Auth\GoogleAuthRequest;
 use App\Http\Requests\Api\V1\Auth\LoginRequest;
 use App\Http\Requests\Api\V1\Auth\RegisterRequest;
 use App\Http\Resources\Api\V1\UserResource;
 use App\Models\User;
+use App\Notifications\Auth\VerifyEmailWithJwt;
+use App\Services\AzureBlobService;
+use App\Services\JwtService;
 use App\Support\ApiResponse;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Http\JsonResponse;
@@ -17,14 +21,14 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\Response;
-use App\Services\JwtService;
 
 final class AuthController extends Controller
 {
     public function __construct(
-        protected JwtService $jwtService
+        protected JwtService $jwtService,
+        protected AzureBlobService $azureBlobService
     ) {}
 
     public function register(RegisterRequest $request): JsonResponse
@@ -37,9 +41,9 @@ final class AuthController extends Controller
                 'password' => Hash::make($request->password),
             ]);
 
-            $user->sendEmailVerificationNotification();
+            $user->markEmailAsVerified();
 
-            $token = $this->jwtService->generateToken($user);
+            $this->ensureSelfProfileExists($user);
 
             Log::info('User registration successful', [
                 'user_id' => $user->id,
@@ -48,10 +52,11 @@ final class AuthController extends Controller
 
             return ApiResponse::success(
                 [
-                    'token' => $token,
                     'user' => UserResource::make($user->load('profile')),
+                    'verification_required' => false,
+                    'login_url' => config('auth.email_verification.frontend_login_url'),
                 ],
-                'Registration successful. Please verify your email address.',
+                'Registration successful. Redirecting to login page.',
                 Response::HTTP_CREATED
             );
         } catch (\Throwable $e) {
@@ -75,10 +80,7 @@ final class AuthController extends Controller
                 return ApiResponse::error('Invalid credentials.', Response::HTTP_UNAUTHORIZED);
             }
 
-            if (! $user->hasVerifiedEmail()) {
-                Log::warning('Login failed: Email not verified', ['user_id' => $user->id, 'email' => $user->email]);
-                return ApiResponse::error('Email is not verified. Please verify your email before logging in.', Response::HTTP_FORBIDDEN);
-            }
+            $this->ensureSelfProfileExists($user);
 
             $token = $this->jwtService->generateToken($user);
 
@@ -140,6 +142,8 @@ final class AuthController extends Controller
                 Log::info('Existing user linked to Google account', ['user_id' => $user->id, 'email' => $user->email]);
             }
 
+            $this->ensureSelfProfileExists($user);
+
             $token = $this->jwtService->generateToken($user);
 
             Log::info('Google authentication successful', [
@@ -180,6 +184,67 @@ final class AuthController extends Controller
         }
     }
 
+    public function updateMe(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        try {
+            $request->validate([
+                'name' => ['sometimes', 'string', 'max:255'],
+                'email' => ['sometimes', 'string', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
+                'phone' => ['nullable', 'string', 'max:20'],
+                'avatar' => ['nullable', 'image', 'max:10240'],
+                'emergency_contact_name' => ['nullable', 'string', 'max:255'],
+                'emergency_contact_phone' => ['nullable', 'string', 'max:20'],
+            ]);
+
+            $userData = array_filter(
+                $request->only(['name', 'email', 'phone', 'emergency_contact_name', 'emergency_contact_phone']),
+                static fn ($value) => $value !== null
+            );
+
+            if ($request->hasFile('avatar')) {
+                if ($user->avatar) {
+                    $this->deleteAzureFile($user->avatar);
+                }
+                $uploaded = $this->azureBlobService->uploadFile($request->file('avatar'), 'avatars');
+                $userData['avatar'] = $uploaded['url'];
+            }
+
+            $user->update($userData);
+
+            // Sync with "self" profile
+            $user->reportProfiles()->updateOrCreate(
+                ['relation' => ProfileRelation::SELF->value],
+                array_filter([
+                    'name' => $user->name,
+                    'email' => $user->email,
+                ], static fn ($value) => $value !== null)
+            );
+
+            Log::info('User profile updated successfully', ['user_id' => $user->id]);
+
+            return ApiResponse::success(
+                UserResource::make($user->load('profile')),
+                'User profile updated successfully.'
+            );
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+                'meta' => [],
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        } catch (\Throwable $e) {
+            Log::error('User profile update failed with exception', [
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return ApiResponse::error('An error occurred while updating the profile.', Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
     public function logout(Request $request): JsonResponse
     {
         try {
@@ -201,26 +266,85 @@ final class AuthController extends Controller
 
     public function resendVerification(Request $request): JsonResponse
     {
+        $request->validate([
+            'email' => ['required', 'email', 'string'],
+        ]);
+
         try {
-            $user = $request->user();
+            $user = User::where('email', $request->email)->first();
+
+            if (! $user) {
+                Log::warning('Resend verification failed: User not found', ['email' => $request->email]);
+                return ApiResponse::error('User not found.', Response::HTTP_NOT_FOUND);
+            }
 
             if ($user->hasVerifiedEmail()) {
                 Log::warning('Resend verification failed: Email already verified', ['user_id' => $user->id]);
                 return ApiResponse::error('Email is already verified.', Response::HTTP_BAD_REQUEST);
             }
 
-            $user->sendEmailVerificationNotification();
+            $verificationToken = $this->jwtService->generateEmailVerificationToken($user);
+            $user->notify(new VerifyEmailWithJwt($verificationToken));
 
             Log::info('Verification email resent successfully', ['user_id' => $user->id]);
 
-            return ApiResponse::success(message: 'Verification email resent.');
+            return ApiResponse::success([
+                'email' => $user->email,
+                'verification_required' => true,
+                'verification_url' => $this->verificationPageUrl($user->email),
+            ], 'Verification email resent.');
         } catch (\Throwable $e) {
             Log::error('Resending verification email failed', [
-                'user_id' => $request->user()?->id,
+                'email' => $request->email,
                 'error' => $e->getMessage(),
             ]);
 
             return ApiResponse::error('Failed to resend verification email.', Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    public function verifyEmailToken(Request $request): JsonResponse
+    {
+        $request->validate([
+            'token' => ['required', 'string'],
+        ]);
+
+        try {
+            $payload = $this->jwtService->validateToken($request->token, JwtService::PURPOSE_EMAIL_VERIFICATION);
+
+            if (! $payload || empty($payload['sub']) || empty($payload['email_hash'])) {
+                Log::warning('Email verification failed: Invalid JWT payload');
+                return ApiResponse::error('Invalid verification token.', Response::HTTP_FORBIDDEN);
+            }
+
+            $user = User::findOrFail($payload['sub']);
+
+            if (! hash_equals((string) $payload['email_hash'], sha1($user->getEmailForVerification()))) {
+                Log::warning('Email verification failed: Email hash mismatch', ['user_id' => $user->id]);
+                return ApiResponse::error('Invalid verification token.', Response::HTTP_FORBIDDEN);
+            }
+
+            if ($user->hasVerifiedEmail()) {
+                Log::info('Email verification skipped: Already verified', ['user_id' => $user->id]);
+                return ApiResponse::success([
+                    'login_url' => config('auth.email_verification.frontend_login_url'),
+                ], 'Email already verified.');
+            }
+
+            $user->markEmailAsVerified();
+            event(new Verified($user));
+
+            Log::info('Email verified successfully', ['user_id' => $user->id]);
+
+            return ApiResponse::success([
+                'login_url' => config('auth.email_verification.frontend_login_url'),
+            ], 'Email verified successfully. Please login.');
+        } catch (\Throwable $e) {
+            Log::error('Email verification failed with exception', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return ApiResponse::error('Email verification failed.', Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -280,6 +404,50 @@ final class AuthController extends Controller
         } catch (\Throwable $exception) {
             Log::warning('Google token validation failed.', ['message' => $exception->getMessage()]);
             return null;
+        }
+    }
+
+    private function verificationUrl(string $verificationToken): string
+    {
+        $baseUrl = rtrim((string) config('auth.email_verification.frontend_verify_url'), '/');
+        $separator = str_contains($baseUrl, '?') ? '&' : '?';
+
+        return $baseUrl . $separator . 'token=' . urlencode($verificationToken);
+    }
+
+    private function verificationPageUrl(string $email): string
+    {
+        $baseUrl = rtrim((string) config('auth.email_verification.frontend_verify_url'), '/');
+        $separator = str_contains($baseUrl, '?') ? '&' : '?';
+
+        return $baseUrl . $separator . 'email=' . urlencode($email);
+    }
+
+    private function ensureSelfProfileExists(User $user): void
+    {
+        $user->reportProfiles()->firstOrCreate(
+            ['relation' => ProfileRelation::SELF->value],
+            [
+                'name' => $user->name,
+                'email' => $user->email,
+            ]
+        );
+    }
+
+    private function deleteAzureFile(string $url): void
+    {
+        try {
+            $parsed = parse_url($url, PHP_URL_PATH);
+            if ($parsed) {
+                $parts = explode('/', trim($parsed, '/'));
+                if (count($parts) > 1) {
+                    array_shift($parts); // Remove container name
+                    $blobName = implode('/', $parts);
+                    $this->azureBlobService->deleteFile($blobName);
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Failed to delete old Azure file', ['url' => $url, 'error' => $e->getMessage()]);
         }
     }
 }

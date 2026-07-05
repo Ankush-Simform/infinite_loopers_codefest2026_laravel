@@ -23,8 +23,8 @@ final class TimelineController extends Controller
             $user = $request->user();
             $query = $user->timelineEvents();
 
-            if ($request->filled('profile_id')) {
-                $query->where('profile_id', $request->query('profile_id'));
+            if ($request->filled('report_profile_id')) {
+                $query->where('report_profile_id', $request->query('report_profile_id'));
             }
 
             if ($request->filled('search')) {
@@ -59,7 +59,7 @@ final class TimelineController extends Controller
     {
         try {
             $event = TimelineEvent::create([
-                'profile_id' => $request->profile_id,
+                'report_profile_id' => $request->report_profile_id,
                 'event_type' => $request->event_type,
                 'title' => $request->title,
                 'description' => $request->description,
@@ -69,7 +69,7 @@ final class TimelineController extends Controller
 
             Log::info('Timeline event created successfully', [
                 'event_id' => $event->id,
-                'profile_id' => $event->profile_id,
+                'report_profile_id' => $event->report_profile_id,
             ]);
 
             return ApiResponse::success(TimelineResource::make($event), 'Timeline event created successfully.', Response::HTTP_CREATED);
@@ -111,7 +111,7 @@ final class TimelineController extends Controller
 
             $updateData = array_filter(
                 $request->only([
-                    'profile_id',
+                    'report_profile_id',
                     'event_type',
                     'title',
                     'description',

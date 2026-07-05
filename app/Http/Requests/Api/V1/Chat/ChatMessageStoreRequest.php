@@ -16,7 +16,7 @@ final class ChatMessageStoreRequest extends ApiFormRequest
             'report_id' => [
                 'nullable',
                 Rule::exists('medical_reports', 'id')->where(function ($query): void {
-                    $query->whereIn('profile_id', $this->user()?->profiles()->pluck('id')->toArray() ?: []);
+                    $query->whereIn('report_profile_id', $this->user()?->reportProfiles()->pluck('id')->toArray() ?: []);
                 }),
             ],
             'metadata' => ['nullable', 'array'],

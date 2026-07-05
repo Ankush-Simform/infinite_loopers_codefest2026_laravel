@@ -11,9 +11,8 @@ class TimelineEventSeeder extends Seeder
     public function run(): void
     {
         foreach (MedicalReport::all() as $report) {
-
             TimelineEvent::create([
-                'profile_id' => $report->profile_id,
+                'report_profile_id' => $report->report_profile_id,
                 'report_id' => $report->id,
                 'event_type' => 'Report Uploaded',
                 'title' => $report->title,

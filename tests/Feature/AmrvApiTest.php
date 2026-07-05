@@ -5,14 +5,16 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Models\User;
-use App\Models\Profile;
+use App\Models\ReportProfile;
 use App\Models\MedicalReport;
 use App\Models\ReportCategory;
 use App\Models\TimelineEvent;
 use App\Models\ChatSession;
+use App\Notifications\Auth\VerifyEmailWithJwt;
 use App\Enums\Gender;
 use App\Enums\ProfileRelation;
 use App\Enums\ReportStatus;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
@@ -25,7 +27,7 @@ class AmrvApiTest extends TestCase
     use RefreshDatabase;
 
     protected User $user;
-    protected Profile $profile;
+    protected ReportProfile $profile;
     protected ReportCategory $category;
 
     protected function setUp(): void
@@ -49,7 +51,7 @@ class AmrvApiTest extends TestCase
         $this->user->markEmailAsVerified();
 
         // Create user profile
-        $this->profile = $this->user->profiles()->create([
+        $this->profile = $this->user->reportProfiles()->create([
             'name' => 'John Doe',
             'email' => 'johndoe@example.com',
             'relation' => ProfileRelation::SELF->value,
@@ -66,6 +68,8 @@ class AmrvApiTest extends TestCase
      */
     public function test_authentication_flow(): void
     {
+        Notification::fake();
+
         // 1. Test Registration
         $registerResponse = $this->postJson('/api/v1/auth/register', [
             'name' => 'Jane Doe',
@@ -76,7 +80,24 @@ class AmrvApiTest extends TestCase
         ]);
 
         $registerResponse->assertStatus(201)
-            ->assertJsonPath('success', true);
+            ->assertJsonPath('success', true)
+            ->assertJsonMissingPath('data.token')
+            ->assertJsonMissingPath('data.verification_token')
+            ->assertJsonPath('data.verification_required', false);
+
+        $registeredUser = User::where('email', 'janedoe@example.com')->firstOrFail();
+        Notification::assertNotSentTo($registeredUser, VerifyEmailWithJwt::class);
+
+        $this->assertTrue($registeredUser->refresh()->hasVerifiedEmail());
+
+        $verifiedLoginResponse = $this->postJson('/api/v1/auth/login', [
+            'email' => 'janedoe@example.com',
+            'password' => 'Password123!',
+        ]);
+
+        $verifiedLoginResponse->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonStructure(['data' => ['token']]);
 
         // 2. Test Login
         $loginResponse = $this->postJson('/api/v1/auth/login', [
@@ -105,13 +126,13 @@ class AmrvApiTest extends TestCase
 
         // 1. List profiles
         $listResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-            ->getJson('/api/v1/profiles');
+            ->getJson('/api/v1/report-profiles');
         $listResponse->assertOk()
             ->assertJsonCount(1, 'data');
 
         // 2. Create family profile
         $createResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-            ->postJson('/api/v1/profiles', [
+            ->postJson('/api/v1/report-profiles', [
                 'name' => 'Spouse Doe',
                 'relation' => 'family',
                 'email' => 'spouse@example.com',
@@ -121,13 +142,13 @@ class AmrvApiTest extends TestCase
 
         // 3. Get profile details
         $showResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-            ->getJson('/api/v1/profiles/' . $spouseProfileId);
+            ->getJson('/api/v1/report-profiles/' . $spouseProfileId);
         $showResponse->assertOk()
             ->assertJsonPath('data.name', 'Spouse Doe');
 
         // 4. Update profile details
         $updateResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-            ->postJson('/api/v1/profiles/' . $spouseProfileId, [
+            ->postJson('/api/v1/report-profiles/' . $spouseProfileId, [
                 '_method' => 'PUT',
                 'name' => 'Spouse Doe Updated',
             ]);
@@ -136,7 +157,7 @@ class AmrvApiTest extends TestCase
 
         // 5. Delete profile
         $deleteResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-            ->deleteJson('/api/v1/profiles/' . $spouseProfileId);
+            ->deleteJson('/api/v1/report-profiles/' . $spouseProfileId);
         $deleteResponse->assertOk();
     }
 
@@ -185,11 +206,11 @@ class AmrvApiTest extends TestCase
         $token = app(\App\Services\JwtService::class)->generateToken($this->user);
         Storage::fake('public');
 
-        $this->mock(\App\Services\CloudinaryService::class, function ($mock) {
+        $this->mock(\App\Services\AzureBlobService::class, function ($mock) {
             $mock->shouldReceive('uploadFile')
                 ->andReturn([
-                    'url' => 'https://res.cloudinary.com/demo/image/upload/v1570975200/sample.pdf',
-                    'public_id' => 'sample_id',
+                    'url' => 'https://amrvblobstorage.blob.core.windows.net/amrv-container/staging/sample.pdf',
+                    'public_id' => 'staging/sample.pdf',
                     'format' => 'pdf',
                     'bytes' => 500000,
                 ]);
@@ -200,7 +221,7 @@ class AmrvApiTest extends TestCase
         // 1. Stage 1: Upload File
         $uploadResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
             ->postJson('/api/v1/reports/upload', [
-                'profile_id' => $this->profile->id,
+                'report_profile_id' => $this->profile->id,
                 'file' => $file,
             ]);
 
@@ -223,7 +244,7 @@ class AmrvApiTest extends TestCase
         // 4. Stage 4: Save report
         $saveResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
             ->postJson('/api/v1/reports/upload/' . $uploadId . '/save', [
-                'profile_id' => $this->profile->id,
+                'report_profile_id' => $this->profile->id,
                 'report' => [
                     'title' => 'My Reviewed Staged Blood Report',
                     'report_type' => 'pdf',
@@ -264,7 +285,7 @@ class AmrvApiTest extends TestCase
         // 1. Create Event
         $response = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
             ->postJson('/api/v1/timelines', [
-                'profile_id' => $this->profile->id,
+                'report_profile_id' => $this->profile->id,
                 'event_type' => 'checkup',
                 'title' => 'Annual Health Checkup',
                 'description' => 'General physical checkup',
@@ -325,5 +346,70 @@ class AmrvApiTest extends TestCase
             ->deleteJson('/api/v1/chats/' . $sessionId);
 
         $deleteResponse->assertOk();
+    }
+
+    public function test_new_profile_and_user_edit_routes(): void
+    {
+        // 1. Create a user and check "self" profile exists
+        $user = User::create([
+            'name' => 'Original Name',
+            'email' => 'original@example.com',
+            'password' => Hash::make('password'),
+        ]);
+
+        $token = app(\App\Services\JwtService::class)->generateToken($user);
+
+        // Ensure "self" profile exists via ensureSelfProfileExists logic in login
+        $this->postJson('/api/v1/auth/login', [
+            'email' => 'original@example.com',
+            'password' => 'password',
+        ])->assertOk();
+
+        $this->assertDatabaseHas('report_profiles', [
+            'user_id' => $user->id,
+            'name' => 'Original Name',
+            'email' => 'original@example.com',
+            'relation' => \App\Enums\ProfileRelation::SELF->value,
+        ]);
+
+        // 2. Test GET profiles/enums
+        $enumsResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+            ->getJson('/api/v1/report-profiles/enums');
+
+        $enumsResponse->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonStructure(['data' => ['relations', 'genders']]);
+
+        // 3. Test PUT auth/me to update user profile and sync with "self" profile
+        $updateResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+            ->putJson('/api/v1/auth/me', [
+                'name' => 'Updated Name',
+                'phone' => '+111111111',
+                'emergency_contact_name' => 'Emergency Name',
+                'emergency_contact_phone' => '+222222222',
+            ]);
+
+        $updateResponse->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.name', 'Updated Name')
+            ->assertJsonPath('data.phone', '+111111111')
+            ->assertJsonPath('data.emergency_contact_name', 'Emergency Name')
+            ->assertJsonPath('data.emergency_contact_phone', '+222222222');
+
+        // Assert User model is updated
+        $this->assertDatabaseHas('users', [
+            'id' => $user->id,
+            'name' => 'Updated Name',
+            'phone' => '+111111111',
+            'emergency_contact_name' => 'Emergency Name',
+            'emergency_contact_phone' => '+222222222',
+        ]);
+
+        // Assert Profile model is synced
+        $this->assertDatabaseHas('report_profiles', [
+            'user_id' => $user->id,
+            'name' => 'Updated Name',
+            'relation' => \App\Enums\ProfileRelation::SELF->value,
+        ]);
     }
 }
