@@ -41,6 +41,7 @@ return [
         'retries' => env('FLASK_API_RETRIES', 2),
         'retry_sleep_ms' => env('FLASK_API_RETRY_SLEEP_MS', 250),
         'shared_secret' => env('AI_SERVICE_SHARED_SECRET', 'super-secret-key-123!'),
+        'mock_enabled' => (bool) env('FLASK_API_MOCK_ENABLED', true),
     ],
 
     'google' => [

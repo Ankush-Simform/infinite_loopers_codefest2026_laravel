@@ -17,6 +17,10 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             AiServiceContract::class,
             function ($app) {
+                if (config('services.flask.mock_enabled', true)) {
+                    return $app->make(MockAiService::class);
+                }
+
                 if (config('services.flask.base_url') && config('app.env') !== 'testing') {
                     return $app->make(FlaskApiService::class);
                 }
