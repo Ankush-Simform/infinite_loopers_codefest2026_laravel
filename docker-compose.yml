@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
 
   app:
@@ -12,6 +10,61 @@ services:
     restart: unless-stopped
 
     working_dir: /var/www
+
+    volumes:
+      - ./:/var/www
+      - ./docker/php/php.ini:/usr/local/etc/php/conf.d/custom.ini
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+    networks:
+      - amrv
+
+  reverb:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+
+    container_name: amrv_reverb
+
+    restart: unless-stopped
+
+    working_dir: /var/www
+
+    command: php artisan reverb:start --host=0.0.0.0 --port=8081
+
+    ports:
+      - "8081:8081"
+
+    volumes:
+      - ./:/var/www
+      - ./docker/php/php.ini:/usr/local/etc/php/conf.d/custom.ini
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+    networks:
+      - amrv
+
+  queue:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+
+    container_name: amrv_queue
+
+    restart: unless-stopped
+
+    working_dir: /var/www
+
+    command: php artisan queue:work --tries=3 --timeout=120
 
     volumes:
       - ./:/var/www

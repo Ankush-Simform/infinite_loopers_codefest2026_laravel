@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\V1\Reports\ReportUploadController;
 use App\Http\Controllers\Api\V1\Reports\WebhookController;
 use App\Http\Controllers\Api\V1\System\StatusController;
 use App\Http\Controllers\Api\V1\Timeline\TimelineController;
+use App\Http\Controllers\Api\V1\User\UserController;
 use App\Support\ApiResponse;
 use Illuminate\Support\Facades\Route;
 use Symfony\Component\HttpFoundation\Response;
@@ -48,10 +49,22 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
         // Home Dashboard API
         Route::get('home', HomeController::class)->name('home');
 
+        // User API
+        Route::get('user', [UserController::class, 'show'])->name('user.show');
+        Route::patch('user', [UserController::class, 'update'])->name('user.update');
+
         // Profile API (Plural profiles resources + singular fallback showSelf)
         Route::get('profile', [ProfileController::class, 'showSelf'])->name('profile.show');
         Route::put('profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
         Route::apiResource('profiles', ProfileController::class);
+
+        // Flutter report-profile aliases
+        Route::get('report-profiles/enums', [ProfileController::class, 'enums'])->name('report-profiles.enums');
+        Route::get('report-profiles', [ProfileController::class, 'index'])->name('report-profiles.index');
+        Route::post('report-profiles', [ProfileController::class, 'store'])->name('report-profiles.store');
+        Route::get('report-profiles/{id}', [ProfileController::class, 'show'])->name('report-profiles.show');
+        Route::put('report-profiles/{id}', [ProfileController::class, 'update'])->name('report-profiles.update');
+        Route::delete('report-profiles/{id}', [ProfileController::class, 'destroy'])->name('report-profiles.destroy');
 
         // Reports API
         Route::get('categories', ReportCategoryController::class)->name('categories.index');

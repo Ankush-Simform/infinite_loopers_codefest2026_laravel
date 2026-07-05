@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api\V1\Profile;
 
+use App\Enums\Gender;
+use App\Enums\ProfileRelation;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Profile\ProfileStoreRequest;
 use App\Http\Requests\Api\V1\Profile\ProfileUpdateRequest;
@@ -23,6 +25,37 @@ final class ProfileController extends Controller
     public function __construct(
         protected AzureBlobService $azureBlobService
     ) {}
+
+    /**
+     * Get valid profile options for Flutter clients.
+     */
+    public function enums(): JsonResponse
+    {
+        return ApiResponse::success([
+            'relations' => array_map(
+                static fn (ProfileRelation $relation): array => [
+                    'label' => ucfirst($relation->value),
+                    'value' => $relation->value,
+                ],
+                ProfileRelation::cases()
+            ),
+            'add_user_relations' => array_map(
+                static fn (ProfileRelation $relation): array => [
+                    'label' => ucfirst($relation->value),
+                    'value' => $relation->value,
+                ],
+                [ProfileRelation::FAMILY, ProfileRelation::OTHER]
+            ),
+            'genders' => array_map(
+                static fn (Gender $gender): array => [
+                    'label' => $gender->value,
+                    'value' => $gender->value,
+                ],
+                Gender::cases()
+            ),
+            'blood_groups' => ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'],
+        ], 'Profile enums retrieved.');
+    }
 
     /**
      * List all profiles belonging to the user.
@@ -84,6 +117,10 @@ final class ProfileController extends Controller
     {
         try {
             $user = $request->user();
+
+            if ($request->relation === ProfileRelation::SELF->value && $user->profiles()->where('relation', ProfileRelation::SELF->value)->exists()) {
+                return ApiResponse::error('Self profile already exists for this user.', Response::HTTP_UNPROCESSABLE_ENTITY);
+            }
 
             $profile = DB::transaction(function () use ($user, $request) {
                 // If relation is 'self', update user's emergency contact name and phone
@@ -307,18 +344,6 @@ final class ProfileController extends Controller
 
     private function deleteAzureFile(string $url): void
     {
-        try {
-            $parsed = parse_url($url, PHP_URL_PATH);
-            if ($parsed) {
-                $parts = explode('/', trim($parsed, '/'));
-                if (count($parts) > 1) {
-                    array_shift($parts); // Remove container name
-                    $blobName = implode('/', $parts);
-                    $this->azureBlobService->deleteFile($blobName);
-                }
-            }
-        } catch (\Throwable $e) {
-            Log::warning('Failed to delete old Azure file', ['url' => $url, 'error' => $e->getMessage()]);
-        }
+        $this->azureBlobService->deleteFileByUrl($url);
     }
 }

@@ -24,6 +24,7 @@ RUN apt-get update && apt-get install -y \
         bcmath \
         intl \
         zip \
+        pcntl \
         gd \
         opcache \
     && pecl install redis \

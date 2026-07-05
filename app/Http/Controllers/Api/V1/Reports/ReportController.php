@@ -298,18 +298,6 @@ final class ReportController extends Controller
 
     private function deleteAzureFile(string $url): void
     {
-        try {
-            $parsed = parse_url($url, PHP_URL_PATH);
-            if ($parsed) {
-                $parts = explode('/', trim($parsed, '/'));
-                if (count($parts) > 1) {
-                    array_shift($parts); // Remove container name
-                    $blobName = implode('/', $parts);
-                    $this->azureBlobService->deleteFile($blobName);
-                }
-            }
-        } catch (\Throwable $e) {
-            Log::warning('Failed to delete old Azure file', ['url' => $url, 'error' => $e->getMessage()]);
-        }
+        $this->azureBlobService->deleteFileByUrl($url);
     }
 }

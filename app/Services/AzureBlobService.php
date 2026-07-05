@@ -180,6 +180,35 @@ class AzureBlobService
     }
 
     /**
+     * Delete a file when the database stores the full Azure blob URL.
+     */
+    public function deleteFileByUrl(string $url): bool
+    {
+        try {
+            $parsed = parse_url($url, PHP_URL_PATH);
+            if (! $parsed) {
+                return false;
+            }
+
+            $parts = explode('/', trim($parsed, '/'));
+            if (count($parts) <= 1) {
+                return false;
+            }
+
+            array_shift($parts);
+
+            return $this->deleteFile(implode('/', $parts));
+        } catch (\Throwable $e) {
+            Log::warning('Failed to delete Azure file by URL', [
+                'url' => $url,
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
+
+    /**
      * Download / Fetch file content from Azure Blob Storage.
      *
      * @return array{content: string, mime_type: string}

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api\V1\Auth;
 
+use App\Enums\ProfileRelation;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Auth\GoogleAuthRequest;
 use App\Http\Requests\Api\V1\Auth\LoginRequest;
@@ -15,6 +16,7 @@ use App\Support\ApiResponse;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -29,14 +31,23 @@ final class AuthController extends Controller
     public function register(RegisterRequest $request): JsonResponse
     {
         try {
-            $user = User::create([
-                'name' => $request->name,
-                'email' => $request->email,
-                'phone' => $request->phone,
-                'password' => Hash::make($request->password),
-            ]);
+            $user = DB::transaction(function () use ($request): User {
+                $user = User::create([
+                    'name' => $request->name,
+                    'email' => $request->email,
+                    'phone' => $request->phone,
+                    'password' => Hash::make($request->password),
+                    'email_verified_at' => now(),
+                ]);
 
-            $user->sendEmailVerificationNotification();
+                $user->profiles()->create([
+                    'name' => $request->name,
+                    'email' => $request->email,
+                    'relation' => ProfileRelation::SELF->value,
+                ]);
+
+                return $user;
+            });
 
             $token = $this->jwtService->generateToken($user);
 
@@ -50,7 +61,7 @@ final class AuthController extends Controller
                     'token' => $token,
                     'user' => UserResource::make($user->load('profile')),
                 ],
-                'Registration successful. Please verify your email address.',
+                'Registration successful.',
                 Response::HTTP_CREATED
             );
         } catch (\Throwable $e) {
@@ -73,12 +84,6 @@ final class AuthController extends Controller
                 Log::warning('Login failed: Invalid credentials', ['email' => $request->email]);
 
                 return ApiResponse::error('Invalid credentials.', Response::HTTP_UNAUTHORIZED);
-            }
-
-            if (! $user->hasVerifiedEmail()) {
-                Log::warning('Login failed: Email not verified', ['user_id' => $user->id, 'email' => $user->email]);
-
-                return ApiResponse::error('Email is not verified. Please verify your email before logging in.', Response::HTTP_FORBIDDEN);
             }
 
             $token = $this->jwtService->generateToken($user);
@@ -129,18 +134,36 @@ final class AuthController extends Controller
                 ->first();
 
             if ($user === null) {
-                $user = User::create([
-                    'name' => $payload['name'] ?? $payload['email'],
-                    'email' => $payload['email'],
-                    'phone' => null,
-                    'password' => null,
-                    'google_id' => $payload['sub'],
-                    'email_verified_at' => now(),
-                ]);
+                $user = DB::transaction(function () use ($payload): User {
+                    $user = User::create([
+                        'name' => $payload['name'] ?? $payload['email'],
+                        'email' => $payload['email'],
+                        'phone' => null,
+                        'password' => null,
+                        'google_id' => $payload['sub'],
+                        'email_verified_at' => now(),
+                    ]);
+
+                    $user->profiles()->create([
+                        'name' => $user->name,
+                        'email' => $user->email,
+                        'relation' => ProfileRelation::SELF->value,
+                    ]);
+
+                    return $user;
+                });
                 Log::info('New user registered via Google', ['user_id' => $user->id, 'email' => $user->email]);
             } elseif ($user->google_id === null) {
                 $user->update(['google_id' => $payload['sub'], 'email_verified_at' => $user->email_verified_at ?? now()]);
                 Log::info('Existing user linked to Google account', ['user_id' => $user->id, 'email' => $user->email]);
+            }
+
+            if (! $user->profiles()->where('relation', ProfileRelation::SELF->value)->exists()) {
+                $user->profiles()->create([
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'relation' => ProfileRelation::SELF->value,
+                ]);
             }
 
             $token = $this->jwtService->generateToken($user);

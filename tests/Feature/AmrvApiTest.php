@@ -77,6 +77,11 @@ class AmrvApiTest extends TestCase
         $registerResponse->assertStatus(201)
             ->assertJsonPath('success', true);
 
+        $this->assertDatabaseHas('profiles', [
+            'email' => 'janedoe@example.com',
+            'relation' => ProfileRelation::SELF->value,
+        ]);
+
         // 2. Test Login
         $loginResponse = $this->postJson('/api/v1/auth/login', [
             'email' => 'johndoe@example.com',
@@ -93,6 +98,23 @@ class AmrvApiTest extends TestCase
 
         $meResponse->assertOk()
             ->assertJsonPath('data.email', 'johndoe@example.com');
+    }
+
+    public function test_unverified_user_can_login(): void
+    {
+        $user = User::factory()->unverified()->create([
+            'email' => 'unverified@example.com',
+            'password' => Hash::make('password'),
+        ]);
+
+        $response = $this->postJson('/api/v1/auth/login', [
+            'email' => $user->email,
+            'password' => 'password',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonStructure(['data' => ['token', 'user']]);
     }
 
     /**
@@ -137,6 +159,106 @@ class AmrvApiTest extends TestCase
         $deleteResponse = $this->withHeaders(['Authorization' => 'Bearer '.$token])
             ->deleteJson('/api/v1/profiles/'.$spouseProfileId);
         $deleteResponse->assertOk();
+    }
+
+    public function test_report_profiles_flutter_endpoints(): void
+    {
+        $token = app(JwtService::class)->generateToken($this->user);
+
+        $enumResponse = $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->getJson('/api/v1/report-profiles/enums');
+        $enumResponse->assertOk()
+            ->assertJsonPath('data.relations.0.value', 'self')
+            ->assertJsonPath('data.add_user_relations.0.value', 'family');
+
+        $listResponse = $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->getJson('/api/v1/report-profiles');
+        $listResponse->assertOk()
+            ->assertJsonCount(1, 'data');
+
+        $createResponse = $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->postJson('/api/v1/report-profiles', [
+                'name' => 'Parent Doe',
+                'relation' => ProfileRelation::FAMILY->value,
+                'gender' => Gender::OTHER->value,
+            ]);
+        $createResponse->assertCreated()
+            ->assertJsonPath('data.name', 'Parent Doe');
+
+        $profileId = $createResponse->json('data.id');
+
+        $showResponse = $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->getJson('/api/v1/report-profiles/'.$profileId);
+        $showResponse->assertOk()
+            ->assertJsonPath('data.id', $profileId);
+
+        $updateResponse = $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->putJson('/api/v1/report-profiles/'.$profileId, [
+                'name' => 'Parent Doe Updated',
+                'relation' => ProfileRelation::OTHER->value,
+            ]);
+        $updateResponse->assertOk()
+            ->assertJsonPath('data.name', 'Parent Doe Updated');
+
+        $deleteResponse = $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->deleteJson('/api/v1/report-profiles/'.$profileId);
+        $deleteResponse->assertOk();
+
+        $this->assertSoftDeleted('profiles', ['id' => $profileId]);
+    }
+
+    public function test_user_profile_fetch_and_update_json(): void
+    {
+        $token = app(JwtService::class)->generateToken($this->user);
+
+        $showResponse = $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->getJson('/api/v1/user');
+        $showResponse->assertOk()
+            ->assertJsonPath('data.email', $this->user->email);
+
+        $updateResponse = $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->patchJson('/api/v1/user', [
+                'name' => 'John Updated',
+                'blood_group' => 'B+',
+                'height_cm' => 180.25,
+                'emergency_contact_name' => 'Jane Emergency',
+                'emergency_contact_phone' => '+10000000000',
+            ]);
+
+        $updateResponse->assertOk()
+            ->assertJsonPath('data.name', 'John Updated')
+            ->assertJsonPath('data.emergency_contact_name', 'Jane Emergency');
+
+        $this->assertDatabaseHas('profiles', [
+            'id' => $this->profile->id,
+            'name' => 'John Updated',
+            'blood_group' => 'B+',
+            'height_cm' => 180.25,
+        ]);
+    }
+
+    public function test_user_profile_update_accepts_avatar_multipart(): void
+    {
+        $token = app(JwtService::class)->generateToken($this->user);
+
+        $this->mock(AzureBlobService::class, function ($mock) {
+            $mock->shouldReceive('uploadFile')
+                ->once()
+                ->andReturn([
+                    'url' => 'https://amrvblobstorage.blob.core.windows.net/amrv-container/avatars/avatar.jpg',
+                    'public_id' => 'avatars/avatar.jpg',
+                    'format' => 'jpg',
+                    'bytes' => 1000,
+                ]);
+        });
+
+        $response = $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->patch('/api/v1/user', [
+                'avatar' => UploadedFile::fake()->image('avatar.jpg'),
+            ]);
+
+        $response->assertOk()
+            ->assertJsonPath('data.avatar_url', 'https://amrvblobstorage.blob.core.windows.net/amrv-container/avatars/avatar.jpg');
     }
 
     /**

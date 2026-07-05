@@ -26,6 +26,7 @@ class Profile extends Model
         'height_cm',
         'weight_kg',
         'tags',
+        'profile_photo_path',
     ];
 
     protected function casts(): array
