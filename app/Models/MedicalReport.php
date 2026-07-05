@@ -19,22 +19,29 @@ class MedicalReport extends Model
     use GeneratesPrimaryKey, HasFactory, SoftDeletes;
 
     protected $fillable = [
+        'user_id',
         'report_profile_id',
         'report_category_id',
         'reference_id',
+        'blob_name',
         'title',
         'report_type',
+        'storage_provider',
         'doctor_name',
         'hospital_name',
         'report_date',
         'file_url',
         'file_hash',
+        'original_file_name',
+        'mime_type',
+        'file_size',
         'status',
     ];
 
     protected function casts(): array
     {
         return [
+            'user_id' => 'string',
             'reference_id' => 'integer',
             'report_date' => 'date',
             'status' => ReportStatus::class,
@@ -54,7 +61,13 @@ class MedicalReport extends Model
     |--------------------------------------------------------------------------
     | Relationships
     |--------------------------------------------------------------------------
+    |
     */
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
 
     public function reportProfile(): BelongsTo
     {

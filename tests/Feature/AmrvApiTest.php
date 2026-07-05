@@ -15,6 +15,8 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
 
 class AmrvApiTest extends TestCase
@@ -23,9 +25,9 @@ class AmrvApiTest extends TestCase
 
     protected User $user;
 
-    protected ReportProfile $profile;
+    protected \App\Models\ReportProfile $profile;
 
-    protected ReportCategory $category;
+    protected \App\Models\ReportCategory $category;
 
     protected function setUp(): void
     {
@@ -200,6 +202,7 @@ class AmrvApiTest extends TestCase
      */
     public function test_staged_reports_review_workflow(): void
     {
+        Queue::fake([\App\Jobs\ProcessMedicalReportJob::class]);
         $token = app(JwtService::class)->generateToken($this->user);
         Storage::fake('public');
 
@@ -218,7 +221,6 @@ class AmrvApiTest extends TestCase
         // 1. Stage 1: Upload File
         $uploadResponse = $this->withHeaders(['Authorization' => 'Bearer '.$token])
             ->postJson('/api/v1/reports/upload', [
-                'report_profile_id' => $this->profile->id,
                 'file' => $file,
             ]);
 
@@ -227,10 +229,38 @@ class AmrvApiTest extends TestCase
 
         $uploadId = $uploadResponse->json('upload_id');
 
+        // Verify job was queued
+        Queue::assertPushed(\App\Jobs\ProcessMedicalReportJob::class, function ($job) use ($uploadId) {
+            return $job->reportId === $uploadId;
+        });
+
+        // Simulate Webhook call from ML service
+        $webhookResponse = $this->withHeaders(['Authorization' => 'Bearer ' . config('services.ai.webhook_secret')])
+            ->postJson('/api/webhooks/report-processing-complete', [
+                'report_id' => $uploadId,
+                'summary' => 'This is an AI summary.',
+                'report_type' => 'blood_test',
+                'extracted_text' => 'Extracted raw text.',
+                'risk_level' => 'Low',
+                'confidence_score' => 95.0,
+                'recommendations' => ['Drink water'],
+                'medical_entities' => [
+                    [
+                        'entity_type' => 'vital',
+                        'entity_name' => 'Systolic Blood Pressure',
+                        'value' => '120',
+                        'unit' => 'mmHg',
+                    ],
+                ],
+            ]);
+
+        $webhookResponse->assertOk();
+
         // 2. Stage 2: Check Status
         $statusResponse = $this->withHeaders(['Authorization' => 'Bearer '.$token])
             ->getJson('/api/v1/reports/upload/'.$uploadId.'/status');
-        $statusResponse->assertOk();
+        $statusResponse->assertOk()
+            ->assertJsonPath('status', 'completed'); // waiting_confirmation maps to completed in controller
 
         // 3. Stage 3: Get Review data
         $reviewResponse = $this->withHeaders(['Authorization' => 'Bearer '.$token])

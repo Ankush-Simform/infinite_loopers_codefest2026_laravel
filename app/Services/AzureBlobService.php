@@ -110,6 +110,7 @@ class AzureBlobService
             Log::error('Azure Blob Service Exception during upload', [
                 'error' => $e->getMessage(),
                 'file_name' => $file->getClientOriginalName(),
+                
             ]);
 
             throw new \Exception('Failed to upload file to Azure storage: '.$e->getMessage());

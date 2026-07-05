@@ -29,7 +29,7 @@ final class ReportProfileResource extends JsonResource
 
             public function toArray($request): array
             {
-                return $this->collection->map(function ($item) {
+                return $this->collection->map(function ($item) use ($request) {
                     return (new ReportProfileResource($item, $this->isBrief))->toArray($request);
                 })->all();
             }
