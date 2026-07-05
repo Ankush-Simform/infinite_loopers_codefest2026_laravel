@@ -42,6 +42,8 @@ return [
         'retry_sleep_ms' => env('AI_API_RETRY_SLEEP_MS', 250),
         'shared_secret' => env('AI_SERVICE_SHARED_SECRET', 'super-secret-key-123!'),
         'mock_enabled' => (bool) env('AI_API_MOCK_ENABLED', true),
+        'bearer_token' => env('AI_BEARER_TOKEN'),
+        'webhook_secret' => env('REPORT_AI_WEBHOOK_SECRET'),
     ],
 
     'google' => [

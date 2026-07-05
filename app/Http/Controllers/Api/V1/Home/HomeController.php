@@ -30,11 +30,11 @@ final class HomeController extends Controller
                     'latest_report_date' => $reportProfile ? $reportProfile->medicalReports()->latest('report_date')->value('report_date')?->toDateString() : null,
                     'total_chats' => $user->chatSessions()->count(),
                 ],
-                'latest_reports' => $profile
-                    ? ReportResource::collection($profile->medicalReports()->with('category')->latest('report_date')->limit(3)->get())
+                'latest_reports' => $reportProfile
+                    ? ReportResource::collection($reportProfile->medicalReports()->with('category')->latest('report_date')->limit(3)->get())
                     : [],
-                'latest_timeline' => $profile
-                    ? TimelineResource::collection($profile->timelineEvents()->latest('event_date')->latest('id')->limit(3)->get())
+                'latest_timeline' => $reportProfile
+                    ? TimelineResource::collection($reportProfile->timelineEvents()->latest('event_date')->latest('id')->limit(3)->get())
                     : [],
                 'recent_chat' => ($recentChatSession = $user->chatSessions()->latest('last_message_at')->first())
                     ? ChatSessionResource::make($recentChatSession)

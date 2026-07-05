@@ -95,6 +95,17 @@ final class RequestResponseLogger
         foreach ($payload as $key => $value) {
             if (is_array($value)) {
                 $payload[$key] = $this->sanitizePayload($value);
+            } elseif ($value instanceof \Symfony\Component\HttpFoundation\File\UploadedFile) {
+                $payload[$key] = [
+                    'class' => get_class($value),
+                    'original_name' => $value->getClientOriginalName(),
+                    'mime_type' => $value->getClientMimeType(),
+                    'size' => $value->getSize(),
+                ];
+            } elseif (is_object($value)) {
+                $payload[$key] = '[Object: ' . get_class($value) . ']';
+            } elseif (is_resource($value)) {
+                $payload[$key] = '[Resource]';
             } elseif (in_array(strtolower((string) $key), $sensitiveKeys, true)) {
                 $payload[$key] = '[REDACTED]';
             }
