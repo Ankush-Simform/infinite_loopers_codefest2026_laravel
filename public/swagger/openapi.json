@@ -1,0 +1,938 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "AMRV Medical API Backend",
+    "description": "Interactive Swagger UI testing documentation for AMRV's V1 APIs. Authenticate using your Bearer Token to verify endpoints directly from the browser.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "/api/v1",
+      "description": "Local API Server"
+    }
+  ],
+  "security": [
+    {
+      "BearerAuth": []
+    }
+  ],
+  "paths": {
+    "/auth/register": {
+      "post": {
+        "tags": ["1. Authentication"],
+        "summary": "Register a new user",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "email", "password", "password_confirmation"],
+                "properties": {
+                  "name": { "type": "string", "example": "John Doe" },
+                  "email": { "type": "string", "format": "email", "example": "johndoe@example.com" },
+                  "phone": { "type": "string", "example": "+1234567890" },
+                  "password": { "type": "string", "example": "Password123!" },
+                  "password_confirmation": { "type": "string", "example": "Password123!" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "User registered successfully. Verification email sent." },
+          "422": { "description": "Validation failed" }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "tags": ["1. Authentication"],
+        "summary": "Log in user",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": { "type": "string", "format": "email", "example": "test@example.com" },
+                  "password": { "type": "string", "example": "password" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Login successful. Returns Bearer token." },
+          "401": { "description": "Invalid credentials" }
+        }
+      }
+    },
+    "/auth/google": {
+      "post": {
+        "tags": ["1. Authentication"],
+        "summary": "Log in or Register via Google account",
+        "description": "Signs in or registers a user via Google. For local development and testing, you can pass a mock token prefixed with 'mock_token_' (e.g. 'mock_token_john') to log in instantly without hitting the live Google APIs.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["id_token"],
+                "properties": {
+                  "id_token": { "type": "string", "example": "mock_token_john", "description": "Google ID token or 'mock_token_{username}' for local testing" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Google authentication successful." },
+          "401": { "description": "Invalid ID token credentials" }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "tags": ["1. Authentication"],
+        "summary": "Get authenticated user details",
+        "responses": {
+          "200": { "description": "Current user record and loaded profile details returned." }
+        }
+      }
+    },
+    "/auth/email/resend": {
+      "post": {
+        "tags": ["1. Authentication"],
+        "summary": "Resend verification email link",
+        "responses": {
+          "200": { "description": "Verification link sent to user inbox." }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "tags": ["1. Authentication"],
+        "summary": "Log out user (revokes current access token)",
+        "responses": {
+          "200": { "description": "Token revoked successfully." }
+        }
+      }
+    },
+    "/profile": {
+      "get": {
+        "tags": ["2. Profile"],
+        "summary": "Retrieve primary (self) profile details",
+        "responses": {
+          "200": { "description": "Primary profile information returned." }
+        }
+      }
+    },
+    "/profile/password": {
+      "put": {
+        "tags": ["2. Profile"],
+        "summary": "Update/Set user password",
+        "description": "Updates or sets the user's password. If the user currently has a password (registered via email), the old_password parameter is required. If the user has no password set (registered via Google login), the old_password parameter is not required.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["password", "password_confirmation"],
+                "properties": {
+                  "old_password": { "type": "string", "example": "password", "description": "Required only if a password is currently set on the account" },
+                  "password": { "type": "string", "example": "NewPassword123!", "description": "Minimum 8 characters" },
+                  "password_confirmation": { "type": "string", "example": "NewPassword123!" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Password updated successfully." },
+          "422": { "description": "Validation failed / Incorrect old password" }
+        }
+      }
+    },
+    "/profiles": {
+      "get": {
+        "tags": ["2. Profile"],
+        "summary": "List all profiles belonging to the user",
+        "responses": {
+          "200": { "description": "List of user profiles." }
+        }
+      },
+      "post": {
+        "tags": ["2. Profile"],
+        "summary": "Create a new user profile",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "relation"],
+                "properties": {
+                  "name": { "type": "string", "example": "Spouse Doe" },
+                  "email": { "type": "string", "example": "spouse@example.com" },
+                  "relation": { "type": "string", "example": "family", "description": "Relation options: self, family, other" },
+                  "blood_group": { "type": "string", "example": "A-" },
+                  "date_of_birth": { "type": "string", "format": "date", "example": "1996-05-20" },
+                  "gender": { "type": "string", "example": "Female", "description": "Gender options: Male, Female, Other" },
+                  "height_cm": { "type": "number", "format": "float", "example": 165.00 },
+                  "weight_kg": { "type": "number", "format": "float", "example": 58.00 },
+                  "profile_photo": { "type": "string", "format": "binary", "description": "Max 10MB photo file" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Profile created successfully." }
+        }
+      }
+    },
+    "/profiles/{id}": {
+      "get": {
+        "tags": ["2. Profile"],
+        "summary": "Get specific profile details",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Profile details retrieved." }
+        }
+      },
+      "post": {
+        "tags": ["2. Profile"],
+        "summary": "Update specific profile details",
+        "description": "To update profile properties and file uploads, use multipart/form-data POST with the `_method` field set to `PUT`.",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["_method"],
+                "properties": {
+                  "_method": { "type": "string", "example": "PUT" },
+                  "name": { "type": "string", "example": "Spouse Doe Updated" },
+                  "height_cm": { "type": "number", "format": "float", "example": 166.00 },
+                  "profile_photo": { "type": "string", "format": "binary", "description": "Replacement image (max 10MB)" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Profile updated successfully." }
+        }
+      },
+      "delete": {
+        "tags": ["2. Profile"],
+        "summary": "Delete specific profile",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Profile deleted successfully." }
+        }
+      }
+    },
+    "/home": {
+      "get": {
+        "tags": ["3. Home Dashboard"],
+        "summary": "Retrieve Home Dashboard Summary",
+        "description": "Loads profile, stats counters, latest 3 reports, latest 3 timeline events, and recent chat session.",
+        "responses": {
+          "200": { "description": "Aggregated summary data returned successfully." }
+        }
+      }
+    },
+    "/categories": {
+      "get": {
+        "tags": ["4. Medical Reports"],
+        "summary": "List all medical report categories",
+        "responses": {
+          "200": { "description": "Report category dropdown options returned." }
+        }
+      }
+    },
+    "/reports": {
+      "get": {
+        "tags": ["4. Medical Reports"],
+        "summary": "Search & list medical reports",
+        "parameters": [
+          { "name": "search", "in": "query", "description": "Matches title, doctor name, or hospital", "required": false, "schema": { "type": "string" } },
+          { "name": "profile_id", "in": "query", "description": "Filter by profile ID", "required": false, "schema": { "type": "integer" } },
+          { "name": "category_id", "in": "query", "description": "Filter by category ID", "required": false, "schema": { "type": "integer" } },
+          { "name": "report_type", "in": "query", "description": "Filter by report file type extension", "required": false, "schema": { "type": "string" } },
+          { "name": "status", "in": "query", "description": "Filter by status (uploaded, processing, completed, failed)", "required": false, "schema": { "type": "string" } },
+          { "name": "per_page", "in": "query", "description": "Pagination limits", "required": false, "schema": { "type": "integer", "default": 15 } }
+        ],
+        "responses": {
+          "200": { "description": "Paginated medical reports returned." }
+        }
+      },
+      "post": {
+        "tags": ["4. Medical Reports"],
+        "summary": "Asynchronously Upload a medical report",
+        "description": "Uploads report document to Azure Storage, triggers background AI processing queue job, broadcasts progress events over WebSockets (reports.{user_id}), and returns immediate upload status.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["profile_id", "title", "file"],
+                "properties": {
+                  "profile_id": { "type": "integer", "example": 1 },
+                  "report_category_id": { "type": "integer", "example": 1 },
+                  "title": { "type": "string", "example": "CBC Blood Report July" },
+                  "doctor_name": { "type": "string", "example": "Dr. Sarah Smith" },
+                  "hospital_name": { "type": "string", "example": "General Hospital" },
+                  "report_date": { "type": "string", "format": "date", "example": "2026-07-01" },
+                  "file": { "type": "string", "format": "binary", "description": "PDF or Image file (max 10MB)" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Medical report uploaded successfully and queued for processing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "report_id": { "type": "integer", "example": 15 },
+                    "status": { "type": "string", "example": "uploaded" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/upload": {
+      "post": {
+        "tags": ["4. Medical Reports"],
+        "summary": "Stage 1: Upload file to Staging (Review Flow)",
+        "description": "Uploads report document to Azure Storage and registers a temporary staged record.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["profile_id", "file"],
+                "properties": {
+                  "profile_id": { "type": "integer", "example": 1 },
+                  "file": { "type": "string", "format": "binary", "description": "PDF or image file (max 10MB)" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Staging initiated successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "upload_id": { "type": "string", "example": "a4d34fb0-a292-4217-bf30-8a18faee3303" },
+                    "status": { "type": "string", "example": "processing" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/upload/{upload_id}/status": {
+      "get": {
+        "tags": ["4. Medical Reports"],
+        "summary": "Stage 2: Check Processing Status",
+        "description": "Checks the extraction status of the staged report. Returns processing progress or completed.",
+        "parameters": [
+          { "name": "upload_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Status payload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "example": "completed" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/upload/{upload_id}/review": {
+      "get": {
+        "tags": ["4. Medical Reports"],
+        "summary": "Stage 3: Retrieve Staged Review Data",
+        "description": "Gets extracted entities, tags, knowledge summary, and metadata from cache.",
+        "parameters": [
+          { "name": "upload_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Staged review payload." }
+        }
+      }
+    },
+    "/reports/upload/{upload_id}/file": {
+      "get": {
+        "tags": ["4. Medical Reports"],
+        "summary": "Retrieve Staged Report File securely",
+        "description": "Downloads / streams the original staged file from temporary storage.",
+        "parameters": [
+          { "name": "upload_id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "token", "in": "query", "required": false, "schema": { "type": "string" }, "description": "Bearer token query parameter (optional, if Authorization header is not used)" }
+        ],
+        "responses": {
+          "200": { "description": "File stream returned." },
+          "404": { "description": "Staged report file not found or expired." }
+        }
+      }
+    },
+    "/reports/upload/{upload_id}/save": {
+      "post": {
+        "tags": ["4. Medical Reports"],
+        "summary": "Stage 4: Save Finalized Report",
+        "description": "Validates and persists staged report with user edits to database, removing the temp staging record.",
+        "parameters": [
+          { "name": "upload_id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["profile_id", "report"],
+                "properties": {
+                  "profile_id": { "type": "integer", "example": 1 },
+                  "report": {
+                    "type": "object",
+                    "required": ["title", "report_type", "report_date"],
+                    "properties": {
+                      "title": { "type": "string", "example": "My Final CBC Report" },
+                      "report_type": { "type": "string", "example": "pdf" },
+                      "doctor_name": { "type": "string", "example": "Dr. Sarah Smith" },
+                      "hospital_name": { "type": "string", "example": "Central Hospital" },
+                      "report_date": { "type": "string", "format": "date", "example": "2026-07-01" }
+                    }
+                  },
+                  "entities": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "entity_type": { "type": "string" },
+                        "entity_name": { "type": "string" },
+                        "value": { "type": "string" },
+                        "unit": { "type": "string" },
+                        "reference_range": { "type": "string" },
+                        "status": { "type": "string" }
+                      }
+                    }
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Report finalized and saved successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "report_id": { "type": "integer", "example": 42 }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/{id}": {
+      "get": {
+        "tags": ["4. Medical Reports"],
+        "summary": "Get details of a medical report",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Report object and details retrieved." }
+        }
+      },
+      "post": {
+        "tags": ["4. Medical Reports"],
+        "summary": "Update medical report details",
+        "description": "Simulates a PUT request to allow updating files via multipart/form-data by passing the `_method` field with value `PUT`.",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["_method"],
+                "properties": {
+                  "_method": { "type": "string", "example": "PUT" },
+                  "profile_id": { "type": "integer", "example": 1 },
+                  "report_category_id": { "type": "integer", "example": 1 },
+                  "title": { "type": "string", "example": "Updated Report Title" },
+                  "doctor_name": { "type": "string", "example": "Dr. Smith Updated" },
+                  "hospital_name": { "type": "string", "example": "City Wellness" },
+                  "report_date": { "type": "string", "format": "date", "example": "2026-07-02" },
+                  "file": { "type": "string", "format": "binary", "description": "PDF/Image to replace existing document (max 10MB)" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Report updated and file replaced on Azure Storage." }
+        }
+      },
+      "delete": {
+        "tags": ["4. Medical Reports"],
+        "summary": "Delete a medical report",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Report deleted successfully (cleared from Azure Storage)." }
+        }
+      }
+    },
+    "/reports/{id}/file": {
+      "get": {
+        "tags": ["4. Medical Reports"],
+        "summary": "Securely stream/download medical report file",
+        "description": "Validates report ownership, retrieves the private file from Azure Blob Storage, and streams the binary content directly inline to the authenticated user.",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "token", "in": "query", "required": false, "schema": { "type": "string" }, "description": "Bearer token query parameter (optional, if Authorization header is not used)" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Binary file content streamed inline.",
+            "headers": {
+              "Content-Type": { "schema": { "type": "string", "example": "application/pdf" } },
+              "Content-Disposition": { "schema": { "type": "string", "example": "inline; filename=\"report.pdf\"" } }
+            }
+          },
+          "404": { "description": "Medical report file not found or access denied." }
+        }
+      }
+    },
+    "/timelines": {
+      "get": {
+        "tags": ["5. Timeline Events"],
+        "summary": "List & search timeline events",
+        "parameters": [
+          { "name": "search", "in": "query", "description": "Search title and description", "required": false, "schema": { "type": "string" } },
+          { "name": "profile_id", "in": "query", "description": "Filter by profile", "required": false, "schema": { "type": "integer" } },
+          { "name": "per_page", "in": "query", "required": false, "schema": { "type": "integer", "default": 20 } }
+        ],
+        "responses": {
+          "200": { "description": "Timeline log list returned." }
+        }
+      },
+      "post": {
+        "tags": ["5. Timeline Events"],
+        "summary": "Create a custom timeline event",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["profile_id", "event_type", "title", "event_date"],
+                "properties": {
+                  "profile_id": { "type": "integer", "example": 1 },
+                  "event_type": { "type": "string", "example": "surgery" },
+                  "title": { "type": "string", "example": "Knee Surgery" },
+                  "description": { "type": "string", "example": "Arthroscopy surgery performed." },
+                  "event_date": { "type": "string", "format": "date", "example": "2026-06-15" },
+                  "importance": { "type": "integer", "example": 3 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Timeline event created successfully." }
+        }
+      }
+    },
+    "/timelines/{id}": {
+      "get": {
+        "tags": ["5. Timeline Events"],
+        "summary": "Get timeline event details",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Event object returned." }
+        }
+      },
+      "put": {
+        "tags": ["5. Timeline Events"],
+        "summary": "Update a timeline event",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": { "type": "string", "example": "Knee Surgery - Recovering" },
+                  "importance": { "type": "integer", "example": 2 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Event updated successfully." }
+        }
+      },
+      "delete": {
+        "tags": ["5. Timeline Events"],
+        "summary": "Delete a timeline event",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Event deleted successfully." }
+        }
+      }
+    },
+    "/chats": {
+      "get": {
+        "tags": ["6. AI Chat"],
+        "summary": "List all chat sessions",
+        "responses": {
+          "200": { "description": "Chat session lists returned." }
+        }
+      },
+      "post": {
+        "tags": ["6. AI Chat"],
+        "summary": "Start a new chat session",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": { "type": "string", "example": "Discussion on Blood Test" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Session started successfully." }
+        }
+      }
+    },
+    "/chats/{id}": {
+      "put": {
+        "tags": ["6. AI Chat"],
+        "summary": "Rename a chat session title",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["title"],
+                "properties": {
+                  "title": { "type": "string", "example": "Cholesterol Discussion (Renamed)" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Session renamed successfully." }
+        }
+      },
+      "delete": {
+        "tags": ["6. AI Chat"],
+        "summary": "Delete a chat session",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Session and conversation messages deleted." }
+        }
+      }
+    },
+    "/chats/{id}/messages": {
+      "get": {
+        "tags": ["6. AI Chat"],
+        "summary": "Get message history for a chat session",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "per_page", "in": "query", "required": false, "schema": { "type": "integer", "default": 50 } }
+        ],
+        "responses": {
+          "200": { "description": "Message history returned (chronological)." }
+        }
+      },
+      "post": {
+        "tags": ["6. AI Chat"],
+        "summary": "Send a message (triggers mock/real AI reply)",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "content": {
+                    "type": "string",
+                    "example": "Can you analyze my blood test report and tell me if my cholesterol is fine?",
+                    "description": "Required if attachments are empty."
+                  },
+                  "report_id": {
+                    "type": "integer",
+                    "example": 1,
+                    "description": "Optional linked report ID context"
+                  },
+                  "attachments[]": {
+                    "type": "array",
+                    "description": "Optional file attachments (Max 2, Max 5MB each, pdf/jpg/jpeg/png)",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Streams real-time response chunks from the AI.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "example": "Hello Meet, after reviewing..."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chats/attachments/{id}": {
+      "get": {
+        "tags": ["6. AI Chat"],
+        "summary": "Download a chat attachment securely",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "token", "in": "query", "required": false, "schema": { "type": "string" }, "description": "Bearer token query parameter (optional, if Authorization header is not used)" }
+        ],
+        "responses": {
+          "200": {
+            "description": "File stream returned.",
+            "headers": {
+              "Content-Disposition": {
+                "schema": { "type": "string", "example": "inline; filename=\"report.pdf\"" }
+              }
+            }
+          },
+          "404": { "description": "Attachment not found or access denied." }
+        }
+      }
+    },
+    "/notifications": {
+      "get": {
+        "tags": ["7. Notifications"],
+        "summary": "List user notifications (paginated)",
+        "parameters": [
+          { "name": "unread_only", "in": "query", "required": false, "schema": { "type": "boolean", "default": false } },
+          { "name": "per_page", "in": "query", "required": false, "schema": { "type": "integer", "default": 15 } }
+        ],
+        "responses": {
+          "200": { "description": "Notifications list returned." }
+        }
+      }
+    },
+    "/notifications/{id}/read": {
+      "patch": {
+        "tags": ["7. Notifications"],
+        "summary": "Mark a single notification as read",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Notification marked as read." },
+          "404": { "description": "Notification not found." }
+        }
+      }
+    },
+    "/notifications/read-all": {
+      "post": {
+        "tags": ["7. Notifications"],
+        "summary": "Mark all unread notifications as read",
+        "responses": {
+          "200": { "description": "All notifications marked as read." }
+        }
+      }
+    },
+    "/devices": {
+      "post": {
+        "tags": ["8. Devices"],
+        "summary": "Register or update a device FCM token",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["fcm_token"],
+                "properties": {
+                  "fcm_token": { "type": "string", "example": "fcm_token_string_example_12345" },
+                  "device_name": { "type": "string", "example": "iPhone 15 Pro" },
+                  "platform": { "type": "string", "enum": ["android", "ios", "web"], "example": "ios" },
+                  "app_version": { "type": "string", "example": "1.0.0" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Device token registered successfully." }
+        }
+      },
+      "delete": {
+        "tags": ["8. Devices"],
+        "summary": "De-register a device FCM token",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["fcm_token"],
+                "properties": {
+                  "fcm_token": { "type": "string", "example": "fcm_token_string_example_12345" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Device token de-registered successfully." }
+        }
+      }
+    },
+    "/../webhooks/report-processing-complete": {
+      "post": {
+        "tags": ["9. Webhooks"],
+        "summary": "ML Service Webhook callback to complete report processing",
+        "description": "Receives processed AI analysis payload from the ML service, updates database schemas, logs events, dispatches mobile push/in-app notifications, and broadcasts complete event to reports WebSocket channel.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["report_id", "summary", "report_type", "risk_level"],
+                "properties": {
+                  "report_id": { "type": "integer", "example": 15 },
+                  "summary": { "type": "string", "example": "This report presents general vitals and blood values. Most parameters including blood sugar and triglycerides are within normal ranges." },
+                  "report_type": { "type": "string", "example": "blood_test" },
+                  "extracted_text": { "type": "string", "example": "AMRV MEDICAL ANALYSIS LABS..." },
+                  "risk_level": { "type": "string", "example": "Low" },
+                  "confidence_score": { "type": "number", "example": 97.8 },
+                  "recommendations": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "example": ["Continue regular hydration.", "Schedule follow-up check in 6 months."]
+                  },
+                  "medical_entities": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "entity_type": { "type": "string", "example": "vital" },
+                        "entity_name": { "type": "string", "example": "Systolic Blood Pressure" },
+                        "value": { "type": "string", "example": "120" },
+                        "unit": { "type": "string", "example": "mmHg" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Webhook processed successfully." }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  }
+}
