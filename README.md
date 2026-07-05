@@ -88,7 +88,7 @@ Once the AI model completes analysis, the ML service posts the payload back to L
 
 ## Push & In-App Notifications Integration
 
-This application delivers real-time notifications to users. When report review is finalized, an in-app notification is recorded in the database, and a push notification is dispatched asynchronously to all active registered devices via Firebase Cloud Messaging (FCM).
+This application delivers real-time notifications to users. When the AI finishes processing a report (upon review finalization), an in-app notification is recorded in the database, and a push notification is dispatched asynchronously to all active registered devices via Firebase Cloud Messaging (FCM).
 
 ### 1. Environment Variables Configuration
 To enable live FCM push notifications, add the following variables to your `.env` file:
@@ -107,6 +107,14 @@ If you've already run the initial setup, execute the migrations to generate the 
 php artisan migrate
 ```
 
+### 3. Background Queue Worker
+Push notifications are dispatched asynchronously via a queued job (`SendPushNotificationJob`). Make sure you run a queue worker if you are not running the dev script:
+```bash
+php artisan queue:work
+# or
+php artisan queue:listen
+```
+
 ---
 
 ## API Documentation (Swagger)
@@ -115,6 +123,15 @@ AMRV provides an interactive Swagger UI to review and test all available endpoin
 
 - **URL**: `http://localhost:8000/swagger` (redirects to `/swagger/index.html`)
 - **JSON Spec**: Located in `public/swagger/openapi.json`
+
+### Key Endpoints Added:
+- **Device Management**:
+  - `POST /api/v1/devices` — Register or update an active FCM token. Overwrites ownership automatically if multiple users share the same device.
+  - `DELETE /api/v1/devices` — De-register an FCM token on logout/cleanup.
+- **Notification Management**:
+  - `GET /api/v1/notifications` — Retrieve paginated notifications (accepts `unread_only=true` filter).
+  - `PATCH /api/v1/notifications/{id}/read` — Mark an individual notification as read.
+  - `POST /api/v1/notifications/read-all` — Mark all unread notifications as read.
 
 ---
 
