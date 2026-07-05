@@ -21,21 +21,21 @@ final class MockAiService implements AiServiceContract
 
         $normalizedMessage = strtolower(trim($message));
 
-        $messageText = "Based on the uploaded report, your blood sugar, hemoglobin and cholesterol levels appear to be within the normal range. No critical abnormalities were detected. Please consult your physician for an official medical opinion.";
-        $reportType = "Blood Test";
+        $messageText = 'Based on the uploaded report, your blood sugar, hemoglobin and cholesterol levels appear to be within the normal range. No critical abnormalities were detected. Please consult your physician for an official medical opinion.';
+        $reportType = 'Blood Test';
         $confidence = 98.4;
 
         if (str_contains($normalizedMessage, 'emergency') || str_contains($normalizedMessage, 'chest pain') || str_contains($normalizedMessage, 'breathing')) {
-            $messageText = "WARNING: If you are experiencing severe symptoms, chest pain, or breathing difficulties, please call emergency services immediately or contact your emergency contact. I am an AI helper and cannot replace professional medical diagnosis.";
-            $reportType = "General Wellness";
+            $messageText = 'WARNING: If you are experiencing severe symptoms, chest pain, or breathing difficulties, please call emergency services immediately or contact your emergency contact. I am an AI helper and cannot replace professional medical diagnosis.';
+            $reportType = 'General Wellness';
             $confidence = 99.9;
         } elseif (str_contains($normalizedMessage, 'hello') || str_contains($normalizedMessage, 'hi') || str_contains($normalizedMessage, 'hey')) {
             $messageText = "Hello! I'm your AMRV medical assistant. I can help explain your medical reports, track health trends, or answer general wellness questions. How can I help you today?";
-            $reportType = "General Conversation";
+            $reportType = 'General Conversation';
             $confidence = 95.0;
         } elseif (str_contains($normalizedMessage, 'thank') || str_contains($normalizedMessage, 'thanks')) {
             $messageText = "You're very welcome! If you have any other questions about your health reports or need help understanding wellness advice, feel free to ask.";
-            $reportType = "General Conversation";
+            $reportType = 'General Conversation';
             $confidence = 97.5;
         }
 
@@ -46,8 +46,8 @@ final class MockAiService implements AiServiceContract
                 'confidence' => $confidence,
                 'report_type' => $reportType,
                 'processing_time_ms' => 1240,
-                'citations' => []
-            ]
+                'citations' => [],
+            ],
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     }
 
@@ -72,7 +72,7 @@ final class MockAiService implements AiServiceContract
 
         $fullResponse = $this->generateChatResponse($message, $history, $reportUrl);
         $messageText = $fullResponse;
-        
+
         $decoded = json_decode($fullResponse, true);
         if (is_array($decoded) && isset($decoded['message'])) {
             $messageText = $decoded['message'];
@@ -84,9 +84,9 @@ final class MockAiService implements AiServiceContract
             'code' => 200,
             'data' => [
                 'user_id' => $userId,
-                'session_id' => 'session_' . $sessionId,
-                'response_text' => $messageText
-            ]
+                'session_id' => 'session_'.$sessionId,
+                'response_text' => $messageText,
+            ],
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
         // Split response into small chunks to simulate streaming of the JSON string

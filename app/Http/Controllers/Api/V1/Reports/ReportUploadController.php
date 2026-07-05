@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api\V1\Reports;
 
+use App\Enums\MedicalEntityStatus;
 use App\Enums\ReportStatus;
 use App\Http\Controllers\Controller;
 use App\Models\MedicalEntity;
@@ -263,7 +264,7 @@ final class ReportUploadController extends Controller
                     $status = null;
                     if (isset($ent['status']) && $ent['status'] !== null) {
                         $normalizedStatus = ucfirst(strtolower((string) $ent['status']));
-                        $statusCase = \App\Enums\MedicalEntityStatus::tryFrom($normalizedStatus);
+                        $statusCase = MedicalEntityStatus::tryFrom($normalizedStatus);
                         if ($statusCase) {
                             $status = $statusCase;
                         }

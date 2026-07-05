@@ -72,7 +72,7 @@ final class WebhookController extends Controller
             ]);
 
             // 2. Create Knowledge entry (delete existing if any to prevent duplicates)
-            $report->knowledge()->delete();
+            $report->knowledge()->forceDelete();
             MedicalKnowledge::create([
                 'report_id' => $report->id,
                 'summary' => $data['summary'],
@@ -84,7 +84,7 @@ final class WebhookController extends Controller
             ]);
 
             // 3. Create entities (delete existing)
-            $report->entities()->delete();
+            $report->entities()->forceDelete();
             if (! empty($data['medical_entities'])) {
                 foreach ($data['medical_entities'] as $ent) {
                     MedicalEntity::create([
@@ -100,7 +100,8 @@ final class WebhookController extends Controller
                 }
             }
 
-            // 4. Create timeline event
+            // 4. Create timeline event (clear previous timeline events for this report)
+            $report->timelineEvents()->forceDelete();
             $report->timelineEvents()->create([
                 'profile_id' => $report->profile_id,
                 'event_type' => 'report_upload',
