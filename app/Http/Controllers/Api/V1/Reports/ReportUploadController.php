@@ -189,8 +189,22 @@ final class ReportUploadController extends Controller
                 return ApiResponse::error('Temporary upload not found or expired.', Response::HTTP_NOT_FOUND);
             }
 
+            // Build proxy file url with token query parameter if authenticated
+            $fileUrl = route('api.v1.reports.upload.file', ['upload_id' => $upload_id]);
+            $token = null;
+            $authorization = $request->header('Authorization');
+            if ($authorization && str_starts_with($authorization, 'Bearer ')) {
+                $token = substr($authorization, 7);
+            } elseif ($request->has('token')) {
+                $token = $request->query('token');
+            }
+            if ($token) {
+                $fileUrl .= '?token='.$token;
+            }
+
             return response()->json([
                 'upload_id' => $upload_id,
+                'file_url' => $fileUrl,
                 'report' => $data['report'],
                 'knowledge' => $data['knowledge'],
                 'entities' => $data['entities'],
@@ -203,6 +217,53 @@ final class ReportUploadController extends Controller
             ]);
 
             return ApiResponse::error('Failed to retrieve review details.', Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Get / Stream Staged Upload File
+     */
+    public function showFile(Request $request, string $upload_id)
+    {
+        try {
+            $data = Cache::get('temp_upload_'.$upload_id);
+
+            if ($data === null) {
+                return ApiResponse::error('Temporary upload not found or expired.', Response::HTTP_NOT_FOUND);
+            }
+
+            // Verify that the profile of this upload belongs to the authenticated user
+            $profile = $request->user()->profiles()->find($data['profile_id']);
+            if (! $profile) {
+                return ApiResponse::error('Temporary upload not found or access denied.', Response::HTTP_NOT_FOUND);
+            }
+
+            $url = $data['file_url'];
+
+            $parsed = parse_url($url, PHP_URL_PATH);
+            if (! $parsed) {
+                return ApiResponse::error('Invalid report file path.', Response::HTTP_NOT_FOUND);
+            }
+
+            $parts = explode('/', trim($parsed, '/'));
+            if (count($parts) <= 1) {
+                return ApiResponse::error('Invalid report file path structure.', Response::HTTP_NOT_FOUND);
+            }
+
+            array_shift($parts); // Remove container name
+            $blobName = implode('/', $parts);
+
+            $sasUrl = $this->azureBlobService->generateSasUrl($blobName);
+
+            return redirect($sasUrl);
+        } catch (\Throwable $e) {
+            Log::error('Error displaying staged report file', [
+                'upload_id' => $upload_id,
+                'user_id' => $request->user()?->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return ApiResponse::error('Staged report file not found or access denied.', Response::HTTP_NOT_FOUND);
         }
     }
 

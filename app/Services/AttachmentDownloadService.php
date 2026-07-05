@@ -6,7 +6,7 @@ namespace App\Services;
 
 use App\Models\ChatAttachment;
 use App\Models\User;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class AttachmentDownloadService
@@ -20,7 +20,7 @@ class AttachmentDownloadService
      *
      * @throws NotFoundHttpException
      */
-    public function streamAttachment(User $user, int $attachmentId): StreamedResponse
+    public function streamAttachment(User $user, int $attachmentId): Response
     {
         $attachment = ChatAttachment::findOrFail($attachmentId);
 
@@ -35,18 +35,8 @@ class AttachmentDownloadService
             throw new NotFoundHttpException('Attachment not found or access denied.');
         }
 
-        return new StreamedResponse(function () use ($attachment) {
-            $this->azureBlobService->downloadStream($attachment->stored_name, function ($chunk) {
-                echo $chunk;
-                if (ob_get_level() > 0) {
-                    ob_flush();
-                }
-                flush();
-            });
-        }, 200, [
-            'Content-Type' => $attachment->mime_type,
-            'Content-Disposition' => 'inline; filename="'.basename($attachment->original_name).'"',
-            'Cache-Control' => 'no-cache, must-revalidate',
-        ]);
+        $sasUrl = $this->azureBlobService->generateSasUrl($attachment->stored_name);
+
+        return redirect($sasUrl);
     }
 }

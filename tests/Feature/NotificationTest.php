@@ -422,23 +422,16 @@ class NotificationTest extends TestCase
         ]);
 
         $this->mock(AzureBlobService::class, function ($mock) {
-            $mock->shouldReceive('getFile')
+            $mock->shouldReceive('generateSasUrl')
                 ->with('medical_reports/secure.pdf')
                 ->once()
-                ->andReturn([
-                    'content' => 'fake-pdf-content-stream-bytes',
-                    'mime_type' => 'application/pdf',
-                ]);
+                ->andReturn('https://fake-sas-url.com/secure.pdf');
         });
 
         $response = $this->withHeaders(['Authorization' => 'Bearer '.$this->token])
             ->get("/api/v1/reports/{$report->id}/file");
 
-        $response->assertStatus(200)
-            ->assertHeader('Content-Type', 'application/pdf')
-            ->assertHeader('Content-Disposition', 'inline; filename="secure.pdf"');
-
-        $this->assertEquals('fake-pdf-content-stream-bytes', $response->getContent());
+        $response->assertRedirect('https://fake-sas-url.com/secure.pdf');
     }
 
     /**
@@ -462,22 +455,15 @@ class NotificationTest extends TestCase
         ]);
 
         $this->mock(AzureBlobService::class, function ($mock) {
-            $mock->shouldReceive('getFile')
+            $mock->shouldReceive('generateSasUrl')
                 ->with('medical_reports/secure_query.pdf')
                 ->once()
-                ->andReturn([
-                    'content' => 'fake-query-pdf-content-stream-bytes',
-                    'mime_type' => 'application/pdf',
-                ]);
+                ->andReturn('https://fake-sas-url.com/secure_query.pdf');
         });
 
         // Make request without Authorization header but passing ?token= query parameter
         $response = $this->get("/api/v1/reports/{$report->id}/file?token=".$this->token);
 
-        $response->assertStatus(200)
-            ->assertHeader('Content-Type', 'application/pdf')
-            ->assertHeader('Content-Disposition', 'inline; filename="secure_query.pdf"');
-
-        $this->assertEquals('fake-query-pdf-content-stream-bytes', $response->getContent());
+        $response->assertRedirect('https://fake-sas-url.com/secure_query.pdf');
     }
 }

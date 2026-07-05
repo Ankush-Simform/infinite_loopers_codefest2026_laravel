@@ -59,6 +59,10 @@ final class ReportController extends Controller
 
             $reports = $query->latest('report_date')->latest('id')->paginate($request->query('per_page', 15));
 
+            $reports->setCollection(
+                $reports->getCollection()->map(fn ($report) => new ReportResource($report))
+            );
+
             Log::info('Medical reports listed successfully with filters', [
                 'user_id' => $user->id,
                 'count' => $reports->count(),
@@ -280,11 +284,9 @@ final class ReportController extends Controller
             array_shift($parts); // Remove container name
             $blobName = implode('/', $parts);
 
-            $fileData = $this->azureBlobService->getFile($blobName);
+            $sasUrl = $this->azureBlobService->generateSasUrl($blobName);
 
-            return response($fileData['content'], 200)
-                ->header('Content-Type', $fileData['mime_type'])
-                ->header('Content-Disposition', 'inline; filename="'.basename($blobName).'"');
+            return redirect($sasUrl);
         } catch (\Throwable $e) {
             Log::error('Error displaying report file', [
                 'report_id' => $id,
