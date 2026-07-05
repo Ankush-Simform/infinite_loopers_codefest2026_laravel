@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use App\Models\ActivityLog;
 use App\Enums\ActivityType;
+use App\Models\ActivityLog;
+use Illuminate\Support\Facades\Log;
 
 class ActivityLogger
 {
     /**
      * Log user activity.
+     *
+     * @param  array<string, mixed>|null  $payload  Raw external payload to preserve for audit (e.g. an AI webhook response)
      */
     public static function log(
         int|string|null $userId,
@@ -18,7 +21,8 @@ class ActivityLogger
         ?string $reportProfileId,
         string $action,
         ?string $ip = null,
-        ?string $userAgent = null
+        ?string $userAgent = null,
+        ?array $payload = null
     ): void {
         try {
             ActivityLog::create([
@@ -33,10 +37,11 @@ class ActivityLogger
                     'action' => $action,
                     'report_profile_id' => $reportProfileId,
                 ],
+                'payload' => $payload,
             ]);
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error('ActivityLogger: failed to log activity', [
-                'error' => $e->getMessage()
+            Log::error('ActivityLogger: failed to log activity', [
+                'error' => $e->getMessage(),
             ]);
         }
     }

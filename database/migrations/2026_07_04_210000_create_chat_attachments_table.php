@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('chat_attachments', function (Blueprint $table) {
             $table->id();
-            $table->foreignUlid('chat_message_id')->constrained('chat_messages')->cascadeOnDelete();
+            $table->ulid('chat_message_id')->constrained('chat_messages')->cascadeOnDelete();
             $table->string('original_name');
             $table->string('stored_name');
             $table->string('file_path');
