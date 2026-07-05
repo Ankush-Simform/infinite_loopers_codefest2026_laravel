@@ -19,7 +19,7 @@ class ChatMessageStreamed implements ShouldBroadcastNow
      * Create a new event instance.
      */
     public function __construct(
-        public int $sessionId,
+        public string $sessionId,
         public string $content,
         public string $role = 'assistant'
     ) {}
