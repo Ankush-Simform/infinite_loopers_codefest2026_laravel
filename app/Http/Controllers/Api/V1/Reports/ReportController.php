@@ -5,12 +5,9 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api\V1\Reports;
 
 use App\Enums\ReportStatus;
-use App\Events\ReportUploaded;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Api\V1\Reports\ReportStoreRequest;
 use App\Http\Requests\Api\V1\Reports\ReportUpdateRequest;
 use App\Http\Resources\Api\V1\Reports\ReportResource;
-use App\Jobs\ProcessMedicalReportJob;
 use App\Models\MedicalReport;
 use App\Services\AzureBlobService;
 use App\Services\Reports\MedicalReportFileService;
@@ -83,88 +80,7 @@ final class ReportController extends Controller
         }
     }
 
-    public function store(ReportStoreRequest $request): JsonResponse
-    {
-        try {
-            $file = $request->file('file');
-            $fileHash = hash_file('sha256', $file->getRealPath());
 
-            // Check if this file has already been uploaded for this profile to prevent duplicates
-            $duplicate = MedicalReport::where('report_profile_id', $request->report_profile_id)
-                ->where('file_hash', $fileHash)
-                ->first();
-
-            if ($duplicate) {
-                Log::warning('Duplicate report upload attempted', [
-                    'report_profile_id' => $request->report_profile_id,
-                    'file_hash' => $fileHash,
-                ]);
-
-                return ApiResponse::error('This file has already been uploaded for this profile.', Response::HTTP_CONFLICT);
-            }
-
-            // Reserve a unique reference_id and persist a draft row before touching Azure,
-            // so concurrent uploads can never be assigned the same reference_id.
-            $report = $this->reportFileService->createDraft([
-                'report_profile_id' => $request->report_profile_id,
-                'report_category_id' => $request->report_category_id,
-                'title' => $request->title,
-                'report_type' => $file->getClientOriginalExtension(),
-                'doctor_name' => $request->doctor_name,
-                'hospital_name' => $request->hospital_name,
-                'report_date' => $request->report_date,
-                'file_hash' => $fileHash,
-            ]);
-
-            $uploadedFile = $this->reportFileService->uploadReportFile($report, $file, $request->user()->id);
-
-            $report = DB::transaction(function () use ($report, $uploadedFile) {
-                $report->update([
-                    'file_url' => $uploadedFile['url'],
-                    'status' => ReportStatus::UPLOADED,
-                ]);
-
-                // Create a TimelineEvent for this report upload
-                $report->timelineEvents()->create([
-                    'report_profile_id' => $report->report_profile_id,
-                    'event_type' => 'report_upload',
-                    'title' => 'Report Uploaded: '.$report->title,
-                    'description' => 'Medical report '.$report->title.' was successfully uploaded.',
-                    'event_date' => $report->report_date ?? now()->toDateString(),
-                    'importance' => 1,
-                ]);
-
-                return $report;
-            });
-
-            // 1. Broadcast ReportUploaded Event
-            Log::info('Broadcasting ReportUploaded event', ['report_id' => $report->id]);
-            event(new ReportUploaded($report));
-
-            // 2. Dispatch background ML report processing queue job
-            Log::info('Dispatching ProcessMedicalReportJob', ['report_id' => $report->id]);
-            ProcessMedicalReportJob::dispatch(
-                $report->id,
-                $report->file_url,
-                $report->report_profile_id,
-                $request->user()->id
-            );
-
-            return response()->json([
-                'success' => true,
-                'report_id' => $report->id,
-                'status' => 'uploaded',
-            ], Response::HTTP_CREATED);
-        } catch (\Throwable $e) {
-            Log::error('Error storing medical report', [
-                'user_id' => $request->user()?->id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
-
-            return ApiResponse::error('An error occurred while uploading medical report.', Response::HTTP_INTERNAL_SERVER_ERROR);
-        }
-    }
 
     public function show(Request $request, string $id): JsonResponse
     {

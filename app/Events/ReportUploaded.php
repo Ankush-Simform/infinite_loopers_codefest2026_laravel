@@ -15,19 +15,25 @@ class ReportUploaded implements ShouldBroadcast
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
+    public ?MedicalReport $report = null;
+
     public function __construct(
-        public readonly MedicalReport $report
-    ) {}
+        public readonly int|string $userId,
+        public readonly string $reportId,
+        public readonly string $status,
+        public readonly string $processingStage,
+        public readonly ?string $message = null
+    ) {
+        $this->report = MedicalReport::find($reportId);
+    }
 
     /**
      * Get the channels the event should broadcast on.
      */
     public function broadcastOn(): array
     {
-        $userId = $this->report->reportProfile->user_id;
         return [
-            new PrivateChannel('reports.'.$userId),
-            new PrivateChannel('user.'.$userId),
+            new PrivateChannel('reports.' . $this->userId),
         ];
     }
 
@@ -37,10 +43,10 @@ class ReportUploaded implements ShouldBroadcast
     public function broadcastWith(): array
     {
         return [
-            'report_id' => $this->report->id,
-            'status' => $this->report->status,
-            'file_url' => $this->report->file_url,
-            'stage' => 'upload_complete',
+            'report_id' => $this->reportId,
+            'status' => $this->status,
+            'processing_stage' => $this->processingStage,
+            'message' => $this->message,
         ];
     }
 }

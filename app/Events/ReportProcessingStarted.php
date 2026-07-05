@@ -10,13 +10,16 @@ use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class OcrStarted implements ShouldBroadcast
+class ReportProcessingStarted implements ShouldBroadcast
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
     public function __construct(
+        public readonly int|string $userId,
         public readonly string $reportId,
-        public readonly string $userId
+        public readonly string $status,
+        public readonly string $processingStage,
+        public readonly ?string $message = null
     ) {}
 
     /**
@@ -25,8 +28,7 @@ class OcrStarted implements ShouldBroadcast
     public function broadcastOn(): array
     {
         return [
-            new PrivateChannel('reports.'.$this->userId),
-            new PrivateChannel('user.'.$this->userId),
+            new PrivateChannel('reports.' . $this->userId),
         ];
     }
 
@@ -37,8 +39,9 @@ class OcrStarted implements ShouldBroadcast
     {
         return [
             'report_id' => $this->reportId,
-            'status' => 'processing',
-            'stage' => 'ocr_started',
+            'status' => $this->status,
+            'processing_stage' => $this->processingStage,
+            'message' => $this->message,
         ];
     }
 }
