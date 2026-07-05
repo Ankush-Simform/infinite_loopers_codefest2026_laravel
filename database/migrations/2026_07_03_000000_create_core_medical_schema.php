@@ -13,8 +13,8 @@ return new class extends Migration
     {
         // 1. Report Profiles
         Schema::create('report_profiles', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+            $table->ulid('id')->primary();
+            $table->foreignUlid('user_id')->constrained('users')->cascadeOnDelete();
             $table->string('relation');
             $table->string('name');
             $table->string('email')->nullable();
@@ -29,7 +29,7 @@ return new class extends Migration
 
         // 2. Report Categories
         Schema::create('report_categories', function (Blueprint $table) {
-            $table->id();
+            $table->ulid('id')->primary();
             $table->string('name')->unique();
             $table->string('slug')->unique();
             $table->text('description')->nullable();
@@ -39,9 +39,9 @@ return new class extends Migration
 
         // 3. Medical Reports
         Schema::create('medical_reports', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('report_profile_id')->constrained('report_profiles')->cascadeOnDelete();
-            $table->foreignId('report_category_id')
+            $table->ulid('id')->primary();
+            $table->foreignUlid('report_profile_id')->constrained('report_profiles')->cascadeOnDelete();
+            $table->foreignUlid('report_category_id')
                 ->nullable()
                 ->constrained()
                 ->nullOnDelete();
@@ -60,8 +60,8 @@ return new class extends Migration
 
         // 4. Medical Knowledge
         Schema::create('medical_knowledge', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('report_id')
+            $table->ulid('id')->primary();
+            $table->foreignUlid('report_id')
                 ->unique()
                 ->constrained('medical_reports')
                 ->cascadeOnDelete();
@@ -78,8 +78,8 @@ return new class extends Migration
 
         // 5. Medical Entities
         Schema::create('medical_entities', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('report_id')
+            $table->ulid('id')->primary();
+            $table->foreignUlid('report_id')
                 ->constrained('medical_reports')
                 ->cascadeOnDelete();
 
@@ -96,9 +96,9 @@ return new class extends Migration
 
         // 6. Timeline Events
         Schema::create('timeline_events', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('report_profile_id')->constrained('report_profiles')->cascadeOnDelete();
-            $table->foreignId('report_id')
+            $table->ulid('id')->primary();
+            $table->foreignUlid('report_profile_id')->constrained('report_profiles')->cascadeOnDelete();
+            $table->foreignUlid('report_id')
                 ->nullable()
                 ->constrained('medical_reports')
                 ->nullOnDelete();
@@ -114,8 +114,8 @@ return new class extends Migration
 
         // 7. Report Tags
         Schema::create('report_tags', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('report_id')
+            $table->ulid('id')->primary();
+            $table->foreignUlid('report_id')
                 ->constrained('medical_reports')
                 ->cascadeOnDelete();
 
@@ -126,8 +126,8 @@ return new class extends Migration
 
         // 8. Emergency Cards
         Schema::create('emergency_cards', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('user_id')
+            $table->ulid('id')->primary();
+            $table->foreignUlid('user_id')
                 ->unique()
                 ->constrained('users')
                 ->cascadeOnDelete();
@@ -141,8 +141,8 @@ return new class extends Migration
 
         // 9. Chat Sessions
         Schema::create('chat_sessions', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->ulid('id')->primary();
+            $table->foreignUlid('user_id')->constrained()->cascadeOnDelete();
             $table->string('title')->nullable();
             $table->timestamp('last_message_at')->nullable();
             $table->timestamps();
@@ -151,9 +151,9 @@ return new class extends Migration
 
         // 10. Chat Messages
         Schema::create('chat_messages', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('chat_session_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('report_id')
+            $table->ulid('id')->primary();
+            $table->foreignUlid('chat_session_id')->constrained()->cascadeOnDelete();
+            $table->foreignUlid('report_id')
                 ->nullable()
                 ->constrained('medical_reports')
                 ->nullOnDelete();
@@ -169,8 +169,8 @@ return new class extends Migration
 
         // 11. Notifications
         Schema::create('notifications', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->ulid('id')->primary();
+            $table->foreignUlid('user_id')->constrained()->cascadeOnDelete();
             $table->string('type', 50);
             $table->string('title');
             $table->text('message')->nullable();
@@ -185,12 +185,12 @@ return new class extends Migration
 
         // 12. Activity Logs
         Schema::create('activity_logs', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
+            $table->ulid('id')->primary();
+            $table->foreignUlid('user_id')->nullable()->constrained()->nullOnDelete();
             $table->string('method', 100);
             $table->string('activity_type');
             $table->string('subject_type')->nullable();
-            $table->unsignedBigInteger('subject_id')->nullable();
+            $table->ulid('subject_id')->nullable();
             $table->string('ip_address', 45)->nullable();
             $table->text('user_agent')->nullable();
             $table->json('properties')->nullable();

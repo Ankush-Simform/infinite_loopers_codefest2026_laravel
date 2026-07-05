@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\ReportRiskLevel;
+use App\Models\Traits\GeneratesPrimaryKey;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class MedicalKnowledge extends Model
 {
-    use HasFactory, SoftDeletes;
+    use GeneratesPrimaryKey, HasFactory, SoftDeletes;
 
     protected $table = 'medical_knowledge';
 

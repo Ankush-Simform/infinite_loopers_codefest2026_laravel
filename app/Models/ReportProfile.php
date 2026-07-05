@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\Gender;
 use App\Enums\ProfileRelation;
+use App\Models\Traits\GeneratesPrimaryKey;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -12,7 +13,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ReportProfile extends Model
 {
-    use HasFactory, SoftDeletes;
+    use GeneratesPrimaryKey, HasFactory, SoftDeletes;
 
     protected $table = 'report_profiles';
 

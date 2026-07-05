@@ -97,7 +97,7 @@ final class ReportProfileController extends Controller
     /**
      * Show a specific report profile.
      */
-    public function show(Request $request, int $id): JsonResponse
+    public function show(Request $request, string $id): JsonResponse
     {
         try {
             $profile = $request->user()->reportProfiles()->findOrFail($id);
@@ -121,7 +121,7 @@ final class ReportProfileController extends Controller
     /**
      * Update a specific report profile.
      */
-    public function update(Request $request, int $id): JsonResponse
+    public function update(Request $request, string $id): JsonResponse
     {
         try {
             $user = $request->user();
@@ -175,7 +175,7 @@ final class ReportProfileController extends Controller
     /**
      * Delete a report profile.
      */
-    public function destroy(Request $request, int $id): JsonResponse
+    public function destroy(Request $request, string $id): JsonResponse
     {
         try {
             $user = $request->user();

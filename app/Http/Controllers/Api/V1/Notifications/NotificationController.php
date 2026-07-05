@@ -50,7 +50,7 @@ final class NotificationController extends Controller
     /**
      * Mark a single notification as read.
      */
-    public function read(Request $request, int $id): JsonResponse
+    public function read(Request $request, string $id): JsonResponse
     {
         try {
             $user = $request->user();

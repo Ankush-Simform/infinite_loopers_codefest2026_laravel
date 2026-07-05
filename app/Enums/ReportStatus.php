@@ -8,6 +8,7 @@ enum ReportStatus: string
 {
     case UPLOADED = 'uploaded';
     case PROCESSING = 'processing';
+    case DRAFT = 'draft';
     case COMPLETED = 'completed';
     case FAILED = 'failed';
 }

@@ -83,7 +83,7 @@ final class TimelineController extends Controller
         }
     }
 
-    public function show(Request $request, int $id): JsonResponse
+    public function show(Request $request, string $id): JsonResponse
     {
         try {
             $event = $request->user()->timelineEvents()->findOrFail($id);
@@ -104,7 +104,7 @@ final class TimelineController extends Controller
         }
     }
 
-    public function update(TimelineUpdateRequest $request, int $id): JsonResponse
+    public function update(TimelineUpdateRequest $request, string $id): JsonResponse
     {
         try {
             $event = $request->user()->timelineEvents()->findOrFail($id);
@@ -140,7 +140,7 @@ final class TimelineController extends Controller
         }
     }
 
-    public function destroy(Request $request, int $id): JsonResponse
+    public function destroy(Request $request, string $id): JsonResponse
     {
         try {
             $event = $request->user()->timelineEvents()->findOrFail($id);

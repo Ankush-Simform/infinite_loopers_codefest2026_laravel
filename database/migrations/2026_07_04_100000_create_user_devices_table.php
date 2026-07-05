@@ -12,9 +12,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('user_devices', function (Blueprint $table) {
-            $table->id();
+            $table->ulid('id')->primary();
 
-            $table->foreignId('user_id')
+            $table->foreignUlid('user_id')
                 ->constrained()
                 ->cascadeOnDelete();
 

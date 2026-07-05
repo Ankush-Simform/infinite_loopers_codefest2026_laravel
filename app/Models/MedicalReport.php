@@ -1,22 +1,27 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
 use App\Enums\ReportStatus;
+use App\Models\Traits\GeneratesPrimaryKey;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 
 class MedicalReport extends Model
 {
-    use HasFactory, SoftDeletes;
+    use GeneratesPrimaryKey, HasFactory, SoftDeletes;
 
     protected $fillable = [
         'report_profile_id',
         'report_category_id',
+        'reference_id',
         'title',
         'report_type',
         'doctor_name',
@@ -30,9 +35,19 @@ class MedicalReport extends Model
     protected function casts(): array
     {
         return [
+            'reference_id' => 'integer',
             'report_date' => 'date',
             'status' => ReportStatus::class,
         ];
+    }
+
+    /**
+     * Atomically reserve the next unique reference id via a Postgres sequence,
+     * so concurrent report uploads can never collide on the same value.
+     */
+    public static function nextReferenceId(): int
+    {
+        return (int) DB::selectOne("SELECT nextval('medical_reports_reference_id_seq') AS value")->value;
     }
 
     /*

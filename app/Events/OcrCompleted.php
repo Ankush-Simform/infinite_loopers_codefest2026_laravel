@@ -15,8 +15,8 @@ class OcrCompleted implements ShouldBroadcast
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
     public function __construct(
-        public readonly int $reportId,
-        public readonly int $userId
+        public readonly string $reportId,
+        public readonly string $userId
     ) {}
 
     /**

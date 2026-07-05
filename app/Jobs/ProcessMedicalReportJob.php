@@ -25,10 +25,10 @@ class ProcessMedicalReportJob implements ShouldQueue
      * Create a new job instance.
      */
     public function __construct(
-        public readonly int $reportId,
+        public readonly string $reportId,
         public readonly string $azureFileUrl,
-        public readonly int $reportProfileId,
-        public readonly int $userId
+        public readonly string $reportProfileId,
+        public readonly string $userId
     ) {}
 
     /**
@@ -52,20 +52,13 @@ class ProcessMedicalReportJob implements ShouldQueue
             Log::info('Broadcasting OcrStarted event', ['report_id' => $this->reportId]);
             event(new OcrStarted($this->reportId, $this->userId));
 
-            // Simulate OCR processing time
-            sleep(2);
-
             // 3. Broadcast OCR Completed
             Log::info('Broadcasting OcrCompleted event', ['report_id' => $this->reportId]);
             event(new OcrCompleted($this->reportId, $this->userId));
 
-            sleep(1);
-
             // 4. Broadcast AI Processing
             Log::info('Broadcasting AiProcessing event', ['report_id' => $this->reportId]);
             event(new AiProcessing($this->reportId, $this->userId));
-
-            sleep(2);
 
             // 5. Structure the mock webhook payload from the ML service
             $webhookPayload = [
@@ -120,7 +113,7 @@ class ProcessMedicalReportJob implements ShouldQueue
             Log::info('Dispatching webhook to Laravel endpoint', ['url' => $webhookUrl]);
 
             try {
-                $response = Http::timeout(5)->post($webhookUrl, $webhookPayload);
+                $response = Http::timeout(30)->post($webhookUrl, $webhookPayload);
                 if (!$response->successful()) {
                     throw new \Exception('Webhook server returned status: ' . $response->status());
                 }
@@ -133,7 +126,6 @@ class ProcessMedicalReportJob implements ShouldQueue
                 $controller = app(\App\Http\Controllers\Api\V1\Reports\WebhookController::class);
                 $controller->handlePayloadDirectly($webhookPayload);
             }
-
         } catch (\Throwable $e) {
             Log::error('Error processing medical report in queue', [
                 'report_id' => $this->reportId,

@@ -13,6 +13,7 @@ use App\Models\MedicalEntity;
 use App\Models\ReportTag;
 use App\Services\AzureBlobService;
 use App\Services\NotificationService;
+use App\Services\Reports\MedicalReportFileService;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -26,7 +27,8 @@ final class ReportUploadController extends Controller
 {
     public function __construct(
         protected AzureBlobService $azureBlobService,
-        protected NotificationService $notificationService
+        protected NotificationService $notificationService,
+        protected MedicalReportFileService $reportFileService
     ) {}
 
     /**
@@ -61,18 +63,28 @@ final class ReportUploadController extends Controller
                 return ApiResponse::error('This file has already been uploaded for this profile.', Response::HTTP_CONFLICT);
             }
 
-            // Upload original file to Azure Storage
-            $uploaded = $this->azureBlobService->uploadFile($file, 'staging');
+            // Reserve a unique reference_id and persist a draft row before touching Azure,
+            // so concurrent uploads can never be assigned the same reference_id.
+            $originalName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
+
+            $report = $this->reportFileService->createDraft([
+                'report_profile_id' => $request->report_profile_id,
+                'title' => $originalName !== '' ? $originalName : 'Untitled Report',
+                'report_type' => $file->getClientOriginalExtension(),
+                'file_hash' => $fileHash,
+            ]);
+
+            $uploaded = $this->reportFileService->uploadReportFile($report, $file, $request->user()->id);
+
+            $report->update(['file_url' => $uploaded['url']]);
 
             $uploadId = (string) Str::uuid();
 
             // Structure mock AI response results (normally fetched via OCR/AI services)
             $stagedData = [
                 'created_at' => now()->timestamp,
-                'report_profile_id' => (int) $request->report_profile_id,
-                'file_url' => $uploaded['url'],
-                'file_hash' => $fileHash,
-                'report_type' => $uploaded['format'],
+                'report_id' => $report->id,
+                'report_profile_id' => $request->report_profile_id,
                 'report' => [
                     'title' => 'Staged Report - ' . now()->format('Y-m-d H:i'),
                     'report_type' => $uploaded['format'],
@@ -238,9 +250,12 @@ final class ReportUploadController extends Controller
             ]);
 
             // Persist elements inside database transaction
-            $reportId = DB::transaction(function () use ($request, $data): int {
-                // 1. Create Report
-                $report = MedicalReport::create([
+            $reportId = DB::transaction(function () use ($request, $data): string {
+                // 1. Finalize the draft report row created during staging (already carries
+                // the reference_id and file_url assigned at upload time)
+                $report = MedicalReport::findOrFail($data['report_id']);
+
+                $report->update([
                     'report_profile_id' => $request->report_profile_id,
                     'report_category_id' => $data['report']['report_category_id'] ?? null,
                     'title' => $request->input('report.title'),
@@ -248,8 +263,6 @@ final class ReportUploadController extends Controller
                     'doctor_name' => $request->input('report.doctor_name'),
                     'hospital_name' => $request->input('report.hospital_name'),
                     'report_date' => $request->input('report.report_date'),
-                    'file_url' => $data['file_url'],
-                    'file_hash' => $data['file_hash'],
                     'status' => ReportStatus::COMPLETED,
                 ]);
 

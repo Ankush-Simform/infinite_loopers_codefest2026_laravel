@@ -2,8 +2,8 @@
 
 namespace Database\Seeders;
 
+use App\Models\ReportCategory;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class ReportCategorySeeder extends Seeder
@@ -24,12 +24,10 @@ class ReportCategorySeeder extends Seeder
         ];
 
         foreach ($categories as $category) {
-            DB::table('report_categories')->insert([
+            ReportCategory::create([
                 'name' => $category,
                 'slug' => Str::slug($category),
                 'description' => $category.' Reports',
-                'created_at' => now(),
-                'updated_at' => now(),
             ]);
         }
     }

@@ -207,7 +207,11 @@ final class AuthController extends Controller
                 if ($user->avatar) {
                     $this->deleteAzureFile($user->avatar);
                 }
-                $uploaded = $this->azureBlobService->uploadFile($request->file('avatar'), 'avatars');
+                $uploaded = $this->azureBlobService->uploadFile(
+                    $request->file('avatar'),
+                    AzureBlobService::userProfileFolder($user->id),
+                    ['user_id' => $user->id, 'purpose' => 'avatar']
+                );
                 $userData['avatar'] = $uploaded['url'];
             }
 
@@ -348,7 +352,7 @@ final class AuthController extends Controller
         }
     }
 
-    public function verifyEmail(Request $request, int $id, string $hash): JsonResponse
+    public function verifyEmail(Request $request, string $id, string $hash): JsonResponse
     {
         try {
             $user = User::findOrFail($id);

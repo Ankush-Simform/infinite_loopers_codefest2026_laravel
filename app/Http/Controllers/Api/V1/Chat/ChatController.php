@@ -79,7 +79,7 @@ final class ChatController extends Controller
         }
     }
 
-    public function update(ChatSessionUpdateRequest $request, int $id): JsonResponse
+    public function update(ChatSessionUpdateRequest $request, string $id): JsonResponse
     {
         try {
             $session = $request->user()->chatSessions()->findOrFail($id);
@@ -106,7 +106,7 @@ final class ChatController extends Controller
         }
     }
 
-    public function messages(Request $request, int $id): JsonResponse
+    public function messages(Request $request, string $id): JsonResponse
     {
         try {
             $session = $request->user()->chatSessions()->findOrFail($id);
@@ -131,7 +131,7 @@ final class ChatController extends Controller
         }
     }
 
-    public function sendMessage(ChatMessageStoreRequest $request, int $id): JsonResponse
+    public function sendMessage(ChatMessageStoreRequest $request, string $id): JsonResponse
     {
         try {
             $user = $request->user();
@@ -195,7 +195,6 @@ final class ChatController extends Controller
                 'user_message' => ChatMessageResource::make($messages[0]),
                 'assistant_message' => ChatMessageResource::make($messages[1]),
             ], 'Message sent and reply generated.');
-
         } catch (\Throwable $e) {
             Log::error('Error sending chat message', [
                 'session_id' => $id,
@@ -207,7 +206,7 @@ final class ChatController extends Controller
         }
     }
 
-    public function destroy(Request $request, int $id): JsonResponse
+    public function destroy(Request $request, string $id): JsonResponse
     {
         try {
             $session = $request->user()->chatSessions()->findOrFail($id);

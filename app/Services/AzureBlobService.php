@@ -5,104 +5,105 @@ declare(strict_types=1);
 namespace App\Services;
 
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use MicrosoftAzure\Storage\Blob\BlobRestProxy;
+use MicrosoftAzure\Storage\Blob\Models\CreateBlockBlobOptions;
+use MicrosoftAzure\Storage\Common\Exceptions\ServiceException;
 
 class AzureBlobService
 {
     protected string $accountName;
     protected string $containerName;
     protected string $accountKey;
+    protected BlobRestProxy $client;
 
     public function __construct()
     {
         $this->accountName = config('services.azure.storage_name') ?? env('AZURE_STORAGE_NAME') ?? '';
         $this->containerName = config('services.azure.storage_container') ?? env('AZURE_STORAGE_CONTAINER') ?? '';
         $this->accountKey = config('services.azure.storage_key') ?? env('AZURE_STORAGE_KEY') ?? '';
+
+        $connectionString = sprintf(
+            'DefaultEndpointsProtocol=https;AccountName=%s;AccountKey=%s;EndpointSuffix=core.windows.net',
+            $this->accountName,
+            $this->accountKey
+        );
+
+        $this->client = BlobRestProxy::createBlobService($connectionString);
     }
 
     /**
-     * Upload a file to Azure Blob Storage.
+     * Blob folder for a user's uploaded medical reports.
+     */
+    public static function userReportsFolder(int|string $userId): string
+    {
+        return "user/{$userId}/reports";
+    }
+
+    /**
+     * Blob folder for a user's profile assets (e.g. avatar).
+     */
+    public static function userProfileFolder(int|string $userId): string
+    {
+        return "user/{$userId}/profile";
+    }
+
+    /**
+     * Build the blob filename (without extension) for a medical report, following the
+     * convention: <reference-id>_<sanitized-report-name>_<dd-mm-yyyy--HH:MM:SS>.
+     */
+    public static function buildReportBlobFilename(int|string $referenceId, string $reportName, ?\DateTimeInterface $dateTime = null): string
+    {
+        $dateTime ??= now();
+
+        $sanitizedName = preg_replace('/\s+/', '-', trim($reportName));
+        $sanitizedName = trim((string) preg_replace('/[^A-Za-z0-9\-_]/', '', $sanitizedName), '-') ?: 'report';
+
+        return $referenceId . '_' . $sanitizedName . '_' . $dateTime->format('d-m-Y--H:i:s');
+    }
+
+    /**
+     * Upload a file to Azure Blob Storage using the Azure Storage SDK.
      *
      * @param UploadedFile $file
      * @param string $folder
+     * @param array<string, mixed> $metadata Extra metadata stored alongside the blob (e.g. user_id, report_id).
+     * @param string|null $filename Custom blob filename without extension; defaults to a generated unique name.
      * @return array{url: string, public_id: string, format: string, bytes: int}
      * @throws \Exception
      */
-    public function uploadFile(UploadedFile $file, string $folder = 'amrv'): array
+    public function uploadFile(UploadedFile $file, string $folder = 'amrv', array $metadata = [], ?string $filename = null): array
     {
         try {
             $extension = $file->getClientOriginalExtension();
-            $filename = uniqid('report_', true) . '.' . $extension;
+            $filename = ($filename ?: uniqid('report_', true)) . '.' . $extension;
             $blobName = trim($folder, '/') . '/' . $filename;
 
             $fileContent = file_get_contents($file->getRealPath());
-            $contentLength = (string) strlen($fileContent);
             $contentType = $file->getMimeType() ?: 'application/octet-stream';
 
-            // Generate GMT Date for headers
-            $gmtDate = gmdate('D, d M Y H:i:s \G\M\T');
+            $options = new CreateBlockBlobOptions();
+            $options->setContentType($contentType);
+            $options->setMetadata($this->normalizeMetadata(array_merge($metadata, [
+                'uploaded_at' => now()->toIso8601String(),
+                'original_filename' => $file->getClientOriginalName(),
+            ])));
 
-            // Construct CanonicalizedHeaders (must be sorted alphabetically by header name)
-            $canonicalizedHeaders = "x-ms-blob-type:BlockBlob\n" .
-                                    "x-ms-date:" . $gmtDate . "\n" .
-                                    "x-ms-version:2021-08-06";
-
-            // Construct CanonicalizedResource
-            $canonicalizedResource = "/" . $this->accountName . "/" . $this->containerName . "/" . $blobName;
-
-            // Construct String to Sign
-            $stringToSign = "PUT\n" .               // VERB
-                            "\n" .                  // Content-Encoding
-                            "\n" .                  // Content-Language
-                            $contentLength . "\n" . // Content-Length
-                            "\n" .                  // Content-MD5
-                            $contentType . "\n" .   // Content-Type
-                            "\n" .                  // Date
-                            "\n" .                  // If-Modified-Since
-                            "\n" .                  // If-Unmodified-Since
-                            "\n" .                  // If-Match
-                            "\n" .                  // If-None-Match
-                            "\n" .                  // Range
-                            $canonicalizedHeaders . "\n" .
-                            $canonicalizedResource;
-
-            // Generate HMAC-SHA256 signature
-            $decodedKey = base64_decode($this->accountKey);
-            $signature = base64_encode(hash_hmac('sha256', $stringToSign, $decodedKey, true));
+            $this->client->createBlockBlob($this->containerName, $blobName, $fileContent, $options);
 
             $url = "https://{$this->accountName}.blob.core.windows.net/{$this->containerName}/{$blobName}";
 
-            $response = Http::withHeaders([
-                'Authorization' => "SharedKey {$this->accountName}:{$signature}",
-                'x-ms-date' => $gmtDate,
-                'x-ms-version' => '2021-08-06',
-                'x-ms-blob-type' => 'BlockBlob',
-                'Content-Type' => $contentType,
-                'Content-Length' => $contentLength,
-            ])->withBody($fileContent, $contentType)->put($url);
-
-            if ($response->successful()) {
-                Log::info('Azure Blob Upload Successful', [
-                    'blob' => $blobName,
-                    'url' => $url,
-                ]);
-
-                return [
-                    'url' => $url,
-                    'public_id' => $blobName,
-                    'format' => $extension,
-                    'bytes' => (int) $contentLength,
-                ];
-            }
-
-            Log::error('Azure Blob Upload Failed', [
-                'status' => $response->status(),
-                'response' => $response->body(),
+            Log::info('Azure Blob Upload Successful', [
                 'blob' => $blobName,
+                'url' => $url,
             ]);
 
-            throw new \Exception('Failed to upload file to Azure storage: ' . $response->body());
+            return [
+                'url' => $url,
+                'public_id' => $blobName,
+                'format' => $extension,
+                'bytes' => strlen($fileContent),
+            ];
         } catch (\Throwable $e) {
             Log::error('Azure Blob Service Exception during upload', [
                 'error' => $e->getMessage(),
@@ -122,57 +123,31 @@ class AzureBlobService
     public function deleteFile(string $blobName): bool
     {
         try {
-            $gmtDate = gmdate('D, d M Y H:i:s \G\M\T');
+            $this->client->deleteBlob($this->containerName, $blobName);
 
-            $canonicalizedHeaders = "x-ms-date:" . $gmtDate . "\n" .
-                                    "x-ms-version:2021-08-06";
+            Log::info('Azure Blob Delete Successful', [
+                'blob' => $blobName,
+            ]);
 
-            $canonicalizedResource = "/" . $this->accountName . "/" . $this->containerName . "/" . $blobName;
-
-            $stringToSign = "DELETE\n" .           // VERB
-                            "\n" .                  // Content-Encoding
-                            "\n" .                  // Content-Language
-                            "\n" .                  // Content-Length
-                            "\n" .                  // Content-MD5
-                            "\n" .                  // Content-Type
-                            "\n" .                  // Date
-                            "\n" .                  // If-Modified-Since
-                            "\n" .                  // If-Unmodified-Since
-                            "\n" .                  // If-Match
-                            "\n" .                  // If-None-Match
-                            "\n" .                  // Range
-                            $canonicalizedHeaders . "\n" .
-                            $canonicalizedResource;
-
-            $decodedKey = base64_decode($this->accountKey);
-            $signature = base64_encode(hash_hmac('sha256', $stringToSign, $decodedKey, true));
-
-            $url = "https://{$this->accountName}.blob.core.windows.net/{$this->containerName}/{$blobName}";
-
-            $response = Http::withHeaders([
-                'Authorization' => "SharedKey {$this->accountName}:{$signature}",
-                'x-ms-date' => $gmtDate,
-                'x-ms-version' => '2021-08-06',
-            ])->delete($url);
-
-            if ($response->successful() || $response->status() === 404) {
-                Log::info('Azure Blob Delete Successful', [
-                    'blob' => $blobName,
-                ]);
+            return true;
+        } catch (ServiceException $e) {
+            if ($e->getCode() === 404) {
+                Log::info('Azure Blob Delete Skipped: Blob not found', ['blob' => $blobName]);
                 return true;
             }
 
             Log::error('Azure Blob Delete Failed', [
-                'status' => $response->status(),
-                'response' => $response->body(),
+                'error' => $e->getMessage(),
                 'blob' => $blobName,
             ]);
+
             return false;
         } catch (\Throwable $e) {
             Log::error('Azure Blob Service Exception during delete', [
                 'error' => $e->getMessage(),
                 'blob' => $blobName,
             ]);
+
             return false;
         }
     }
@@ -187,53 +162,12 @@ class AzureBlobService
     public function getFile(string $blobName): array
     {
         try {
-            $gmtDate = gmdate('D, d M Y H:i:s \G\M\T');
+            $blob = $this->client->getBlob($this->containerName, $blobName);
 
-            $canonicalizedHeaders = "x-ms-date:" . $gmtDate . "\n" .
-                                    "x-ms-version:2021-08-06";
-
-            $canonicalizedResource = "/" . $this->accountName . "/" . $this->containerName . "/" . $blobName;
-
-            $stringToSign = "GET\n" .               // VERB
-                            "\n" .                  // Content-Encoding
-                            "\n" .                  // Content-Language
-                            "\n" .                  // Content-Length
-                            "\n" .                  // Content-MD5
-                            "\n" .                  // Content-Type
-                            "\n" .                  // Date
-                            "\n" .                  // If-Modified-Since
-                            "\n" .                  // If-Unmodified-Since
-                            "\n" .                  // If-Match
-                            "\n" .                  // If-None-Match
-                            "\n" .                  // Range
-                            $canonicalizedHeaders . "\n" .
-                            $canonicalizedResource;
-
-            $decodedKey = base64_decode($this->accountKey);
-            $signature = base64_encode(hash_hmac('sha256', $stringToSign, $decodedKey, true));
-
-            $url = "https://{$this->accountName}.blob.core.windows.net/{$this->containerName}/{$blobName}";
-
-            $response = Http::withHeaders([
-                'Authorization' => "SharedKey {$this->accountName}:{$signature}",
-                'x-ms-date' => $gmtDate,
-                'x-ms-version' => '2021-08-06',
-            ])->get($url);
-
-            if ($response->successful()) {
-                return [
-                    'content' => $response->body(),
-                    'mime_type' => $response->header('Content-Type') ?: 'application/octet-stream',
-                ];
-            }
-
-            Log::error('Azure Blob Get File Failed', [
-                'status' => $response->status(),
-                'response' => $response->body(),
-                'blob' => $blobName,
-            ]);
-
-            throw new \Exception('Failed to get file from Azure storage: ' . $response->body());
+            return [
+                'content' => stream_get_contents($blob->getContentStream()),
+                'mime_type' => $blob->getProperties()->getContentType() ?: 'application/octet-stream',
+            ];
         } catch (\Throwable $e) {
             Log::error('Azure Blob Service Exception during getFile', [
                 'error' => $e->getMessage(),
@@ -242,5 +176,32 @@ class AzureBlobService
 
             throw new \Exception('Failed to get file from Azure storage: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Azure blob metadata keys must be valid C#-style identifiers (letters, digits, underscore,
+     * not starting with a digit) and values must be strings.
+     *
+     * @param array<string, mixed> $metadata
+     * @return array<string, string>
+     */
+    private function normalizeMetadata(array $metadata): array
+    {
+        $normalized = [];
+
+        foreach ($metadata as $key => $value) {
+            if ($value === null || $value === '') {
+                continue;
+            }
+
+            $safeKey = preg_replace('/\W/', '_', (string) $key);
+            if ($safeKey === '' || preg_match('/^\d/', $safeKey) === 1) {
+                $safeKey = '_' . $safeKey;
+            }
+
+            $normalized[$safeKey] = (string) $value;
+        }
+
+        return $normalized;
     }
 }

@@ -11,6 +11,7 @@ use App\Http\Requests\Api\V1\Reports\ReportUpdateRequest;
 use App\Http\Resources\Api\V1\Reports\ReportResource;
 use App\Models\MedicalReport;
 use App\Services\AzureBlobService;
+use App\Services\Reports\MedicalReportFileService;
 use App\Support\ApiResponse;
 use App\Events\ReportUploaded;
 use App\Jobs\ProcessMedicalReportJob;
@@ -23,7 +24,8 @@ use Symfony\Component\HttpFoundation\Response;
 final class ReportController extends Controller
 {
     public function __construct(
-        protected AzureBlobService $azureBlobService
+        protected AzureBlobService $azureBlobService,
+        protected MedicalReportFileService $reportFileService
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -95,19 +97,24 @@ final class ReportController extends Controller
                 return ApiResponse::error('This file has already been uploaded for this profile.', Response::HTTP_CONFLICT);
             }
 
-            $uploadedFile = $this->azureBlobService->uploadFile($file, 'medical_reports');
+            // Reserve a unique reference_id and persist a draft row before touching Azure,
+            // so concurrent uploads can never be assigned the same reference_id.
+            $report = $this->reportFileService->createDraft([
+                'report_profile_id' => $request->report_profile_id,
+                'report_category_id' => $request->report_category_id,
+                'title' => $request->title,
+                'report_type' => $file->getClientOriginalExtension(),
+                'doctor_name' => $request->doctor_name,
+                'hospital_name' => $request->hospital_name,
+                'report_date' => $request->report_date,
+                'file_hash' => $fileHash,
+            ]);
 
-            $report = DB::transaction(function () use ($request, $uploadedFile, $fileHash) {
-                $report = MedicalReport::create([
-                    'report_profile_id' => $request->report_profile_id,
-                    'report_category_id' => $request->report_category_id,
-                    'title' => $request->title,
-                    'report_type' => $uploadedFile['format'],
-                    'doctor_name' => $request->doctor_name,
-                    'hospital_name' => $request->hospital_name,
-                    'report_date' => $request->report_date,
+            $uploadedFile = $this->reportFileService->uploadReportFile($report, $file, $request->user()->id);
+
+            $report = DB::transaction(function () use ($report, $uploadedFile) {
+                $report->update([
                     'file_url' => $uploadedFile['url'],
-                    'file_hash' => $fileHash,
                     'status' => ReportStatus::UPLOADED,
                 ]);
 
@@ -133,8 +140,8 @@ final class ReportController extends Controller
             ProcessMedicalReportJob::dispatch(
                 $report->id,
                 $report->file_url,
-                (int) $report->report_profile_id,
-                (int) $request->user()->id
+                $report->report_profile_id,
+                $request->user()->id
             );
 
             return response()->json([
@@ -152,7 +159,7 @@ final class ReportController extends Controller
         }
     }
 
-    public function show(Request $request, int $id): JsonResponse
+    public function show(Request $request, string $id): JsonResponse
     {
         try {
             $report = $request->user()->medicalReports()->with('category')->findOrFail($id);
@@ -173,7 +180,7 @@ final class ReportController extends Controller
         }
     }
 
-    public function update(ReportUpdateRequest $request, int $id): JsonResponse
+    public function update(ReportUpdateRequest $request, string $id): JsonResponse
     {
         try {
             $report = $request->user()->medicalReports()->findOrFail($id);
@@ -198,8 +205,11 @@ final class ReportController extends Controller
                     // Delete old file from Azure Storage
                     $this->deleteAzureFile($report->file_url);
 
-                    // Upload new file
-                    $uploadedFile = $this->azureBlobService->uploadFile($file, 'medical_reports');
+                    // Apply pending attribute changes (e.g. title) in-memory first, so the new
+                    // blob is named using the report's up-to-date title, not the stale one.
+                    $report->fill($updateData);
+
+                    $uploadedFile = $this->reportFileService->uploadReportFile($report, $file, $request->user()->id);
 
                     $updateData['file_url'] = $uploadedFile['url'];
                     $updateData['file_hash'] = $fileHash;
@@ -226,7 +236,7 @@ final class ReportController extends Controller
         }
     }
 
-    public function destroy(Request $request, int $id): JsonResponse
+    public function destroy(Request $request, string $id): JsonResponse
     {
         try {
             $report = $request->user()->medicalReports()->findOrFail($id);
@@ -255,7 +265,7 @@ final class ReportController extends Controller
         }
     }
 
-    public function showFile(Request $request, int $id)
+    public function showFile(Request $request, string $id)
     {
         try {
             $report = $request->user()->medicalReports()->findOrFail($id);
